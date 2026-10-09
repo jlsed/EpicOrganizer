@@ -223,12 +223,17 @@ export function initOrganizer(): OrganizerApi {
     try {
       const entries = await invoke<FolderEntry[]>("list_folder_contents", { root });
       renderSourceEntries(entries);
+      setProgress("");
     } catch (e) {
-      sourcePaneCount.textContent = "Error reading";
+      root = null; // Unset invalid / protected root
+      sourcePaneCount.textContent = "Access denied";
       const errLi = document.createElement("li");
       errLi.className = "file-row";
-      errLi.textContent = `Could not list directory: ${String(e)}`;
+      errLi.style.color = "var(--badge-skip-text)";
+      errLi.style.backgroundColor = "var(--badge-skip-bg)";
+      errLi.textContent = `⚠️ ${String(e)}`;
       sourceFileList.replaceChildren(errLi);
+      setProgress(String(e), true);
     }
 
     // Clear previous plan preview
@@ -239,7 +244,6 @@ export function initOrganizer(): OrganizerApi {
     targetPaneBadge.textContent = "Waiting for plan";
     commanderFooter.classList.add("hidden");
 
-    setProgress("");
     refreshButtons();
   }
 
