@@ -282,10 +282,12 @@ export function initOrganizer(): OrganizerApi {
     }
 
     if (folders.size === 0 && rootFiles.length === 0) {
+      targetPaneBadge.textContent = "No changes needed";
       const emptyNote = document.createElement("div");
       emptyNote.className = "pane-placeholder";
-      emptyNote.textContent = current.summary || "No operations proposed.";
+      emptyNote.textContent = current.summary || "No operations proposed for this folder.";
       planTreeContent.append(emptyNote);
+      commanderFooter.classList.add("hidden");
       return;
     }
 

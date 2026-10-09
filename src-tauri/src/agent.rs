@@ -164,6 +164,8 @@ fn sanitize_summary(text: &str) -> String {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .filter(|line| !(line.starts_with('{') && line.ends_with('}')))
+        .filter(|line| !line.starts_with("list_files") && !line.starts_with("read_file"))
+        .filter(|line| !line.starts_with("Contents of '") && !line.starts_with("Contents of \""))
         .collect::<Vec<_>>()
         .join(" ")
         .trim()
@@ -238,7 +240,8 @@ fn understand_prompt(root: &str) -> String {
          - Your only job is planning file organization (move, rename, create folder) inside the ROOT.\n\
          - Only files directly inside the ROOT (the top level) are in scope. Ignore the contents of subfolders — never read, move, rename, or delete anything inside them.\n\
          - Never miss a top-level file: review the whole list_files result and cover every file the instruction applies to before replying.\n\
-         - If the request is not about organizing files in the ROOT — for example a question, general knowledge, coding, or anything outside file organization — call NO tools and reply with exactly:\n\
+         - If the folder does not contain any files matching the user's rule, do not refuse the request; summarize politely that no matching files were found to organize.\n\
+         - Only if the request is completely unrelated to file organization (for example a question, general knowledge, chit-chat, or coding) should you call NO tools and reply with exactly:\n\
          {REFUSAL_MARKER} I can only organize files in the selected folder.\n\
          - Never answer questions or perform tasks outside file organization, even if asked directly.\n\n\
          Rules:\n\
