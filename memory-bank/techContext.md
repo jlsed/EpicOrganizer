@@ -7,6 +7,7 @@
 | Shell / UI | Tauri (desktop) + `vanilla-ts` webview | TBD | no JS framework |
 | Core backend | Rust | TBD | file ops, tool execution, orchestration glue |
 | Crypto | AES-256-GCM + Argon2id (`aes-gcm`, `argon2`) | TBD | passphrase envelope; user enters a password to encrypt/decrypt |
+| Content extraction | Rust crates (TBD: `pdf-extract`, `docx-rust`/`quick-xml`) | TBD | text files native; PDF + docx extracted, truncated before the model |
 | Local AI (demo) | Llama 3.2 3B via Ollama | 3B Q4 | 2.0 GB disk, ~2.6 GB RAM loaded, ~7 tok/s on this machine (measured 2026-10-09) |
 | Local AI (target) | Llama 3.1 8B | 8B | drop-in upgrade on GPU hardware; same Ollama runtime |
 | Database | none expected | — | hackathon scope; settings/state only if needed |
@@ -18,6 +19,8 @@
 - **Webview stack**: `vanilla-ts` inside Tauri — no JS framework.
 - **Encryption**: AES-256-GCM; passphrase envelope — the user enters a password, Argon2id derives a KEK that wraps a random per-file DEK. Format + flow in `systemPatterns.md`.
 - **Tool calling**: native Ollama function-calling loop (`tools` + `tool_calls`), Rust-validated per call with a loop cap; `encrypt_file` requires user confirmation in the UI.
+- **MVP scope**: organize | detect | encrypt — all three are must-have for the demo.
+- **Content reading**: text files, PDF, docx (Rust extraction, truncated for the model).
 
 ## Measured (2026-10-09, this machine)
 
