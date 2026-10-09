@@ -9,79 +9,156 @@
   </head>
 
   <body>
-    <main class="container">
-      <header class="app-header">
-        <h1>EpicOrganizer</h1>
-        <p class="tagline">Local-AI file organizer — your files never leave this machine.</p>
-        <p id="ai-status" class="status">Checking local AI…</p>
+    <div class="app-layout">
+      <!-- Top Bar -->
+      <header class="top-header">
+        <div class="brand-group">
+          <span class="brand-icon">🗂️</span>
+          <span class="brand-title">EpicOrganizer</span>
+          <span class="brand-divider">|</span>
+          <span class="brand-subtitle">Dual-Pane Commander</span>
+        </div>
+        <div class="header-right">
+          <div id="ai-status" class="privacy-badge">
+            <span class="privacy-dot"></span>
+            <span class="status-label">100% Local &amp; Private</span>
+          </div>
+        </div>
       </header>
 
-      <section class="panel" aria-labelledby="step-folder">
-        <h2 id="step-folder">1 · Choose a folder</h2>
-        <div class="row">
-          <button id="pick-folder" type="button" class="button">Choose folder…</button>
-          <span id="folder-path" class="path muted">No folder selected</span>
-        </div>
-      </section>
+      <!-- App Body Grid -->
+      <div class="app-body">
+        <!-- Left Sidebar: Controls & Instructions -->
+        <div class="sidebar-control">
+          <div>
+            <div class="section-title">1. Source Folder</div>
+            <div class="folder-box">
+              <div class="folder-info">
+                <span>📁</span>
+                <div class="folder-text">
+                  <div id="folder-name" class="folder-name">No folder selected</div>
+                  <div id="folder-path" class="folder-meta muted">Choose a folder to organize</div>
+                </div>
+              </div>
+              <button id="pick-folder" type="button" class="btn-default">Change</button>
+            </div>
+          </div>
 
-      <section class="panel" aria-labelledby="step-instruction">
-        <h2 id="step-instruction">2 · Describe the organization</h2>
-        <textarea
-          id="instruction"
-          rows="3"
-          placeholder="e.g. Move all images into an Images folder and group documents by year"
-        ></textarea>
-        <div class="row">
-          <button id="plan" type="button" class="button primary" disabled>Plan with local AI</button>
-          <span id="progress" class="progress muted"></span>
-        </div>
-      </section>
+          <div class="prompt-box">
+            <div class="section-title">2. Organization Rule</div>
+            <textarea
+              id="instruction"
+              class="commander-textarea"
+              placeholder="e.g. Sort PDF invoices into Invoices/ and group photos by year."
+            ></textarea>
+            
+            <div class="chip-group">
+              <span class="chip-btn" data-prompt="Find sensitive and confidential files like tax forms, bank records, and keys, and move them into a Confidential folder">🔒 Secure Files</span>
+              <span class="chip-btn" data-prompt="Move all PDF invoices and receipts into an Invoices folder">🧾 Invoices</span>
+              <span class="chip-btn" data-prompt="Move zip and archive files into an Archives folder">📦 Archives</span>
+            </div>
+          </div>
 
-      <section id="plan-panel" class="panel hidden" aria-labelledby="step-review">
-        <h2 id="step-review">3 · Review the plan</h2>
-        <p id="plan-summary" class="summary"></p>
-        <ul id="plan-ops" class="ops"></ul>
-        <p id="plan-warnings" class="warnings"></p>
-        <div class="row">
-          <button id="approve" type="button" class="button primary" disabled>Approve &amp; execute</button>
-          <button id="discard" type="button" class="button" disabled>Discard</button>
+          <div class="sidebar-bottom">
+            <button id="plan" type="button" class="btn-primary-sidebar" disabled>
+              <span>Preview Tree</span>
+              <span>→</span>
+            </button>
+            <div id="progress" class="status-text muted"></div>
+          </div>
         </div>
-      </section>
 
-      <section id="report-panel" class="panel hidden" aria-labelledby="step-report">
-        <h2 id="step-report">4 · Result</h2>
-        <ul id="report" class="ops"></ul>
-        <div class="row">
-          <button id="scan" type="button" class="button">Check for confidential files</button>
-          <button id="reset" type="button" class="button">Organize another folder</button>
-        </div>
-      </section>
+        <!-- Right Main Workspace -->
+        <div class="main-panes-area">
+          <!-- Empty / Welcome Helper State (before folder is picked) -->
+          <div id="welcome-pane" class="empty-guide-state">
+            <div class="empty-icon">🗂️</div>
+            <div class="empty-title">Ready to Organize</div>
+            <div class="empty-desc">
+              Select a source folder on the left, then describe your rule or click a preset chip to preview the resulting structure before moving files.
+            </div>
+          </div>
 
-      <section id="confidential-panel" class="panel hidden" aria-labelledby="step-confidential">
-        <h2 id="step-confidential">5 · Confidential files</h2>
-        <p id="confidential-status" class="progress muted"></p>
-        <ul id="confidential-list" class="ops"></ul>
-        <div id="passphrase-row" class="row hidden">
-          <input
-            id="passphrase"
-            class="input"
-            type="password"
-            placeholder="Passphrase"
-            autocomplete="new-password"
-          />
-          <input
-            id="passphrase-confirm"
-            class="input"
-            type="password"
-            placeholder="Confirm passphrase"
-            autocomplete="new-password"
-          />
-          <button id="encrypt-selected" type="button" class="button primary" disabled>
-            Encrypt selected
-          </button>
+          <!-- Dual-Pane Workspace (Active & Review State) -->
+          <div id="dual-panes" class="dual-panes-grid hidden">
+            <!-- Left Pane: Source Files -->
+            <div class="pane-card">
+              <div class="pane-header">
+                <span id="source-pane-title">Current Folder</span>
+                <span id="source-pane-count">0 items</span>
+              </div>
+              <ul id="source-file-list" class="pane-scroll file-list">
+                <!-- Populated dynamically -->
+              </ul>
+            </div>
+
+            <!-- Right Pane: Target Planned Structure -->
+            <div class="pane-card target-pane">
+              <div class="pane-header">
+                <span>Target Structure (After Plan)</span>
+                <span id="target-pane-badge" class="target-badge">Waiting for plan</span>
+              </div>
+              <div id="target-tree-container" class="pane-scroll">
+                <div id="plan-empty-note" class="pane-placeholder">Click "Preview Tree" to generate plan.</div>
+                <div id="plan-tree-content" class="tree-content hidden"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Execution Report / Confidential Panel (Dynamic Cards) -->
+          <div id="report-panel" class="status-card hidden">
+            <div class="card-header">
+              <span class="card-title">Execution Results</span>
+              <span id="report-badge" class="badge ready">Completed</span>
+            </div>
+            <ul id="report" class="ops-list"></ul>
+            <div class="footer-actions">
+              <button id="scan" type="button" class="btn-execute">Scan for Confidential Files</button>
+              <button id="reset" type="button" class="btn-default">Organize Another Folder</button>
+            </div>
+          </div>
+
+          <div id="confidential-panel" class="status-card hidden">
+            <div class="card-header">
+              <span class="card-title">Confidential Files Detected</span>
+            </div>
+            <p id="confidential-status" class="status-text muted"></p>
+            <ul id="confidential-list" class="ops-list"></ul>
+            
+            <div id="passphrase-row" class="passphrase-row hidden">
+              <input
+                id="passphrase"
+                class="input-field"
+                type="password"
+                placeholder="Passphrase"
+                autocomplete="new-password"
+              />
+              <input
+                id="passphrase-confirm"
+                class="input-field"
+                type="password"
+                placeholder="Confirm passphrase"
+                autocomplete="new-password"
+              />
+              <button id="encrypt-selected" type="button" class="btn-execute" disabled>
+                Encrypt Selected
+              </button>
+            </div>
+            <ul id="encrypt-results" class="ops-list"></ul>
+          </div>
+
+          <!-- Bottom Footer Bar -->
+          <div id="commander-footer" class="commander-footer hidden">
+            <div id="footer-summary" class="footer-summary">
+              Plan ready to execute.
+            </div>
+            <div class="footer-actions">
+              <button id="discard" type="button" class="btn-default">Discard</button>
+              <button id="approve" type="button" class="btn-execute" disabled>Execute Plan</button>
+            </div>
+          </div>
         </div>
-        <ul id="encrypt-results" class="ops"></ul>
-      </section>
-    </main>
+      </div>
+    </div>
   </body>
 </html>
