@@ -330,6 +330,17 @@ export function initOrganizer(): OrganizerApi {
       return;
     }
     setBusy(true);
+    planButton.innerHTML = '<span class="spinner"></span><span>Planning…</span>';
+    targetPaneBadge.textContent = "Analyzing…";
+    planEmptyNote.classList.add("hidden");
+    planTreeContent.classList.remove("hidden");
+    planTreeContent.innerHTML = `
+      <div class="planning-loader">
+        <div class="loader-spinner"></div>
+        <div class="loader-title">Analyzing folder & drafting plan…</div>
+        <div class="loader-sub">Reading files and determining target structure</div>
+      </div>
+    `;
     setProgress("Analyzing folder and drafting tree…");
     clearConfidential();
     reportPanel.classList.add("hidden");
@@ -342,9 +353,12 @@ export function initOrganizer(): OrganizerApi {
       setProgress(`Plan ready — ${validCount} operation(s) ready.`);
     } catch (error) {
       plan = null;
+      planTreeContent.innerHTML = `<div class="pane-placeholder">${String(error)}</div>`;
+      targetPaneBadge.textContent = "Plan failed";
       setProgress(String(error), true);
     } finally {
       setBusy(false);
+      planButton.innerHTML = '<span>Generate Plan</span><span>→</span>';
     }
   }
 
@@ -378,6 +392,7 @@ export function initOrganizer(): OrganizerApi {
       return;
     }
     setBusy(true);
+    approveButton.innerHTML = '<span class="spinner"></span><span>Executing…</span>';
     setProgress("Executing the approved actions…");
     try {
       const report = await invoke<ExecutionReport>("execute_plan", {
@@ -395,6 +410,7 @@ export function initOrganizer(): OrganizerApi {
       setProgress(String(error), true);
     } finally {
       setBusy(false);
+      approveButton.textContent = "Execute";
     }
   }
 
@@ -403,6 +419,7 @@ export function initOrganizer(): OrganizerApi {
       return;
     }
     scanning = true;
+    scanButton.innerHTML = '<span class="spinner spinner-dark"></span><span>Scanning…</span>';
     confidentialPanel.classList.remove("hidden");
     setConfidentialStatus("Scanning for confidential files…");
     confidentialList.replaceChildren();
@@ -416,6 +433,7 @@ export function initOrganizer(): OrganizerApi {
       setConfidentialStatus(`Scan failed — ${String(error)}`, true);
     } finally {
       scanning = false;
+      scanButton.textContent = "Scan for Confidential Files";
       refreshButtons();
     }
   }
