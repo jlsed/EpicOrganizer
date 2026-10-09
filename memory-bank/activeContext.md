@@ -7,7 +7,10 @@
 ## Locked Decisions (2026-10-09)
 
 - Desktop app: Tauri shell with a Rust core.
-- Local AI: Llama 3.1 8B orchestrates the organization (privacy = local inference).
+- Webview stack: `vanilla-ts` (no JS framework).
+- Local AI runtime (measured 2026-10-09): Ollama at `localhost:11434`; demo model `llama3.2:3b` (2 GB, ~2.6 GB RAM, tool calls + confidential detection verified); Llama 3.1 8B stays the drop-in target on GPU hardware.
+- Encryption: AES-256-GCM with a passphrase envelope (Argon2id derives a KEK that wraps a random per-file DEK); the user enters their password to encrypt and to decrypt.
+- Tool calling: native Ollama function-calling loop; Rust validates every call; `encrypt_file` needs an explicit user confirmation.
 - Natural-language instructions; the AI proposes operations and the user sees the plan.
 - Script tools (Rust) are the only path to file operations; they also read file contents.
 - Confidentiality detection during organizing; flagged files optionally encrypted after user confirmation — encryption implemented in Rust.
@@ -15,12 +18,9 @@
 
 ## Open Questions (owner to answer next)
 
-1. Inference runtime: Ollama / llama.cpp / Rust crate bindings — and does the demo machine have the GPU/RAM for 8B?
-2. Frontend framework for the Tauri webview (React / Svelte / vanilla)?
-3. Encryption: algorithm + key handling (per-file password vs app key; where stored)?
-4. Tool-calling: structured function calls from the model, or a parse-and-validate plan format?
-5. MVP scope cut: which demo flow is must-have vs stretch (organize / detect / encrypt)?
+1. MVP scope cut: which demo flow is must-have vs stretch (organize / detect / encrypt)?
+2. Content-reading scope: text-ish files only (txt/md/csv/json/source) vs document formats (PDF/docx) — determines which confidential files can be content-analyzed.
 
 ## Next Step
 
-- Grill the open questions, then write the MVP plan, fill `commands` in `worktree.config.json`, and start building.
+- Decide the scope cut, scaffold Tauri (`vanilla-ts`), fill `commands` in `worktree.config.json`, and start building.

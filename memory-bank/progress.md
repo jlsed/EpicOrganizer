@@ -9,7 +9,7 @@
 | Milestone | Status | Evidence |
 | --- | --- | --- |
 | M0 — Scaffold | done | rules + skills + memory bank present (commit `dfc583d`) |
-| M1 — Decisions locked | done | `techContext.md`, `systemPatterns.md` (2026-10-09) |
+| M1 — Decisions locked | done | `techContext.md`, `systemPatterns.md`, `activeContext.md` (2026-10-09) — product, stack, runtime, webview, crypto, tool protocol |
 | M2 — MVP: instruction → organized folder | pending | — |
 | M3 — Confidential detection + encrypt flow | pending | — |
 | M4 — Demo polish / offline proof | pending | — |

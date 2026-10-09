@@ -4,19 +4,27 @@
 
 | Layer | Choice | Version | Notes |
 | --- | --- | --- | --- |
-| Shell / UI | Tauri (desktop) | TBD | webview UI; frontend framework TBD |
+| Shell / UI | Tauri (desktop) + `vanilla-ts` webview | TBD | no JS framework |
 | Core backend | Rust | TBD | file ops, tool execution, orchestration glue |
-| Crypto | Rust (crate TBD) | TBD | encryption/decryption of flagged files |
-| Local AI | Llama 3.1 8B | 8B | runs on-device; inference runtime TBD |
+| Crypto | AES-256-GCM + Argon2id (`aes-gcm`, `argon2`) | TBD | passphrase envelope; user enters a password to encrypt/decrypt |
+| Local AI (demo) | Llama 3.2 3B via Ollama | 3B Q4 | 2.0 GB disk, ~2.6 GB RAM loaded, ~7 tok/s on this machine (measured 2026-10-09) |
+| Local AI (target) | Llama 3.1 8B | 8B | drop-in upgrade on GPU hardware; same Ollama runtime |
 | Database | none expected | — | hackathon scope; settings/state only if needed |
 | Testing | TBD | | |
 
-## Open infra decisions (resolve before/while scaffolding)
+## Implementation decisions (locked 2026-10-09)
 
-- **Inference runtime**: how Llama 3.1 8B is served locally (Ollama vs llama.cpp vs Rust bindings) and how Rust/Tauri talks to it.
-- **Frontend framework** inside the Tauri webview.
-- **Encryption scheme + key management**: cipher choice (e.g. AES-GCM via a Rust crate) and where the key/password lives.
-- **Tool-calling protocol**: how model output becomes validated file operations (structured function calls vs a parsed plan format).
+- **Inference runtime**: Ollama (local HTTP at `localhost:11434`); demo model `llama3.2:3b` (measured, see below); 8B is a drop-in upgrade. The app talks to it behind one Rust interface so the model stays swappable.
+- **Webview stack**: `vanilla-ts` inside Tauri — no JS framework.
+- **Encryption**: AES-256-GCM; passphrase envelope — the user enters a password, Argon2id derives a KEK that wraps a random per-file DEK. Format + flow in `systemPatterns.md`.
+- **Tool calling**: native Ollama function-calling loop (`tools` + `tool_calls`), Rust-validated per call with a loop cap; `encrypt_file` requires user confirmation in the UI.
+
+## Measured (2026-10-09, this machine)
+
+- `llama3.2:3b` Q4 via Ollama 0.40.1: 2.0 GB disk; ~2.6 GB RAM while loaded (CPU-only); ~6.8 tok/s; short JSON responses 8–14 s wall.
+- Tool calling: emits valid structured `tool_calls` JSON (validated against a `move_file` schema). Needs a `list_files` tool + prompt discipline so it doesn't guess paths.
+- Confidential detection: correct JSON verdict on an SSN/bank-account sample.
+- Demo tip: keep the model resident (Ollama `keep_alive`) to avoid cold-load pauses.
 
 ## Tooling & commands
 
