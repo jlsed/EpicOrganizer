@@ -2,5 +2,8 @@
   "mainBranch": "main",
   "worktreeRoot": "",
   "secretFiles": [".env", ".env.local"],
-  "commands": {}
+  "commands": {
+    "test": ["npm", "run", "build"],
+    "release": ["npm", "run", "tauri", "build"]
+  }
 }
