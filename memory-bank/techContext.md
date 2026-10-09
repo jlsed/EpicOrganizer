@@ -13,7 +13,7 @@
 | Local AI (demo) | Llama 3.2 3B via Ollama | 3B Q4 | 2.0 GB disk, ~2.6 GB RAM loaded, ~7 tok/s on this machine (measured 2026-10-09) |
 | Local AI (target) | Llama 3.1 8B | 8B | drop-in upgrade on GPU hardware; same Ollama runtime |
 | Database | none expected | — | hackathon scope; settings/state only if needed |
-| Testing | Rust unit tests + ignored live smoke | — | `cargo test` (28 unit tests + 2 ignored live smokes); live smoke `cargo test -- --ignored` needs Ollama; configured gate = `npm run build` |
+| Testing | Rust unit tests + ignored live smoke | — | `cargo test` (30 unit tests + 2 ignored live smokes); live smoke `cargo test -- --ignored` needs Ollama; configured gate = `npm run build` |
 
 ## Implementation decisions (locked 2026-10-09)
 
