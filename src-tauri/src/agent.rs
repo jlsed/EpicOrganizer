@@ -189,7 +189,7 @@ fn understand_prompt(root: &str) -> String {
          - NEVER use absolute paths, drive letters, or \"..\".\n\
          - Call list_files before mentioning any file or folder; never guess paths.\n\
          - Use read_file only when a file's content helps decide where it belongs. Never read the same file twice.\n\
-         - Images, archives and other binary files return no text — skip them, do not retry.\n\
+         - Text, PDF and Word (.docx) files can be read; scanned or image-only PDFs return no text. Images, archives and other binary files return no text — skip them, do not retry.\n\
          - Inspect the folder, then reply with a short plan summary: which files/folders to organize and where.\n\
          - Only organize what the instruction asks for. Keep file names and extensions unchanged unless asked.\n\
          - Nothing has been changed yet — never claim a file was moved or created.\n\

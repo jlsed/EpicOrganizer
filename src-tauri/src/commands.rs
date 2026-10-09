@@ -1,11 +1,14 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use crate::agent::{self, OrganizePlan};
+use crate::detect::{self, DetectionReport};
 use crate::ollama::OllamaClient;
 use crate::tools::{self, ExecutionReport, OperationRequest, OperationResult, ScopedRoot};
+use crate::crypto;
 
 #[derive(Clone, Serialize)]
 struct ProgressEvent {
@@ -63,4 +66,154 @@ pub async fn check_ollama() -> Result<String, String> {
         let list = if models.is_empty() { "no models installed".to_string() } else { models.join(", ") };
         Err(format!("Model '{wanted}' is not installed in Ollama ({list})."))
     }
+}
+
+#[derive(Clone, Serialize)]
+struct ConfidentialProgressEvent {
+    message: String,
+}
+
+fn emit_confidential_progress(app: &AppHandle, message: impl Into<String>) {
+    let _ = app.emit(
+        "confidential-progress",
+        ConfidentialProgressEvent { message: message.into() },
+    );
+}
+
+/// Hybrid scan: deterministic rules always run; the local model's verdict is
+/// merged in when Ollama is reachable and degrades to a warning when it is not.
+#[tauri::command]
+pub async fn detect_confidential(app: AppHandle, root: String) -> Result<DetectionReport, String> {
+    let client = OllamaClient::new().ok();
+    let progress = move |message: String| emit_confidential_progress(&app, message);
+    detect::scan(client.as_ref(), &PathBuf::from(&root), &progress).await
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EncryptFileResult {
+    pub path: String,
+    pub output: Option<String>,
+    pub ok: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EncryptReport {
+    pub results: Vec<EncryptFileResult>,
+    pub ok_count: usize,
+    pub failed_count: usize,
+}
+
+fn encrypt_one(scoped: &ScopedRoot, rel: &str, passphrase: &str) -> EncryptFileResult {
+    let failure = |message: String| EncryptFileResult {
+        path: rel.to_string(),
+        output: None,
+        ok: false,
+        message,
+    };
+    let path = match scoped.resolve_existing(rel) {
+        Ok(path) => path,
+        Err(message) => return failure(message),
+    };
+    if !path.is_file() {
+        return failure("not a file".to_string());
+    }
+    match crypto::encrypt_file(&path, passphrase) {
+        Ok(outcome) => {
+            let message = if outcome.plaintext_removed {
+                format!("Encrypted — {} byte(s) sealed, original removed.", outcome.bytes)
+            } else {
+                "Encrypted, but the original could not be deleted — remove it manually.".to_string()
+            };
+            EncryptFileResult {
+                path: rel.to_string(),
+                output: Some(scoped.display_rel(&outcome.output)),
+                ok: true,
+                message,
+            }
+        }
+        Err(message) => failure(message),
+    }
+}
+
+/// Explicit, user-approved encryption of selected files. The passphrase never
+/// reaches the model and is zeroized after the command returns.
+#[tauri::command]
+pub async fn encrypt_files(
+    app: AppHandle,
+    root: String,
+    paths: Vec<String>,
+    passphrase: String,
+) -> Result<EncryptReport, String> {
+    if passphrase.is_empty() {
+        return Err("Enter a passphrase first.".into());
+    }
+    let passphrase = zeroize::Zeroizing::new(passphrase);
+    let scoped = ScopedRoot::new(&PathBuf::from(&root))?;
+
+    let mut unique: Vec<String> = Vec::new();
+    let mut seen = BTreeSet::new();
+    for path in paths {
+        let rel = path.trim().replace('\\', "/");
+        if !rel.is_empty() && seen.insert(rel.to_ascii_lowercase()) {
+            unique.push(rel);
+        }
+    }
+    if unique.is_empty() {
+        return Err("Select at least one file to encrypt.".into());
+    }
+
+    let mut results = Vec::with_capacity(unique.len());
+    for rel in unique {
+        emit_confidential_progress(&app, format!("Encrypting '{rel}'…"));
+        results.push(encrypt_one(&scoped, &rel, &passphrase));
+    }
+    let ok_count = results.iter().filter(|result| result.ok).count();
+    let failed_count = results.len() - ok_count;
+    emit_confidential_progress(
+        &app,
+        format!("Encryption finished — {ok_count} succeeded, {failed_count} failed."),
+    );
+    Ok(EncryptReport { results, ok_count, failed_count })
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecryptFileResult {
+    pub path: String,
+    pub output: String,
+    pub ok: bool,
+    pub message: String,
+}
+
+/// Decrypt one `.enc` file back to its original name (round-trip proof). The
+/// encrypted copy is kept; a wrong passphrase fails cleanly with no output.
+#[tauri::command]
+pub async fn decrypt_file(
+    root: String,
+    path: String,
+    passphrase: String,
+) -> Result<DecryptFileResult, String> {
+    if passphrase.is_empty() {
+        return Err("Enter the passphrase first.".into());
+    }
+    let passphrase = zeroize::Zeroizing::new(passphrase);
+    let scoped = ScopedRoot::new(&PathBuf::from(&root))?;
+    let rel = path.trim().replace('\\', "/");
+    if !rel.to_ascii_lowercase().ends_with(".enc") {
+        return Err("Only .enc files can be decrypted.".into());
+    }
+    let file = scoped.resolve_existing(&rel)?;
+    let outcome = crypto::decrypt_file(&file, &passphrase)?;
+    Ok(DecryptFileResult {
+        path: rel,
+        output: scoped.display_rel(&outcome.output),
+        ok: true,
+        message: format!(
+            "Restored {} byte(s); the encrypted copy was kept.",
+            outcome.bytes
+        ),
+    })
 }

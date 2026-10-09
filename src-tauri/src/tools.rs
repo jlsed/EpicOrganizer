@@ -1,5 +1,4 @@
 use std::fs;
-use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -13,7 +12,6 @@ pub const TOOL_RENAME_FILE: &str = "rename_file";
 
 const MAX_LIST_DEPTH: u32 = 2;
 const MAX_LIST_ENTRIES: usize = 200;
-const MAX_READ_BYTES: u64 = 64 * 1024;
 const CONTENT_CHAR_LIMIT: usize = 4096;
 
 /// A file operation proposed by the model, validated and ready for the user to review.
@@ -72,7 +70,7 @@ pub fn read_tool_schemas() -> Vec<Value> {
             "type": "function",
             "function": {
                 "name": TOOL_READ_FILE,
-                "description": "Read the beginning of a text file. The path must be relative to the root.",
+                "description": "Read the beginning of a text, PDF, or Word (.docx) document. The path must be relative to the root.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -359,21 +357,15 @@ pub fn execute_read_file(root: &ScopedRoot, args: &Value) -> Result<String, Stri
     if !path.is_file() {
         return Err(format!("'{rel}' is not a file"));
     }
-    let is_text = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(is_text_extension);
-    if !is_text {
-        return Ok(format!("[content of '{rel}' is not extracted — unsupported file type]"));
-    }
-
-    let file = fs::File::open(&path).map_err(|e| format!("cannot read '{rel}': {e}"))?;
-    let mut bytes = Vec::new();
-    file.take(MAX_READ_BYTES)
-        .read_to_end(&mut bytes)
-        .map_err(|e| format!("cannot read '{rel}': {e}"))?;
-
-    let text = String::from_utf8_lossy(&bytes).replace('\0', "");
+    let text = match crate::extract::extract_text(&path) {
+        Ok(Some(text)) => text,
+        Ok(None) => {
+            return Ok(format!("[content of '{rel}' is not extracted — unsupported file type]"));
+        }
+        Err(reason) => {
+            return Ok(format!("[content of '{rel}' could not be extracted: {reason}]"));
+        }
+    };
     let mut chars = text.chars();
     let truncated_text: String = chars.by_ref().take(CONTENT_CHAR_LIMIT).collect();
     let truncated = chars.next().is_some();
@@ -383,16 +375,6 @@ pub fn execute_read_file(root: &ScopedRoot, args: &Value) -> Result<String, Stri
         out.push_str("\n…[content truncated]");
     }
     Ok(out)
-}
-
-fn is_text_extension(ext: &str) -> bool {
-    matches!(
-        ext.to_ascii_lowercase().as_str(),
-        "txt" | "md" | "markdown" | "csv" | "tsv" | "json" | "jsonl" | "ndjson" | "log" | "yaml"
-            | "yml" | "toml" | "ini" | "cfg" | "conf" | "xml" | "html" | "htm" | "css" | "js"
-            | "mjs" | "cjs" | "ts" | "tsx" | "jsx" | "py" | "rs" | "go" | "java" | "kt" | "cs"
-            | "c" | "h" | "cpp" | "hpp" | "sh" | "ps1" | "bat" | "cmd" | "sql"
-    )
 }
 
 /// Validate a mutation the model proposed. Returns the review description.

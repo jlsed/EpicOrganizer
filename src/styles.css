@@ -206,6 +206,50 @@ textarea:focus,
   color: #b42318;
 }
 
+.input {
+  font: inherit;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #d0d0d0;
+  background-color: #ffffff;
+  color: inherit;
+}
+
+.input:focus {
+  outline: 2px solid #1a7f37;
+  outline-offset: 1px;
+}
+
+.button.small {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.finding {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.finding-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.reason-badge {
+  background-color: #fdf0d5;
+  color: #8a5300;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f6f6f6;
@@ -261,5 +305,15 @@ textarea:focus,
 
   .op.invalid .badge {
     background-color: #4a2724;
+  }
+
+  .input {
+    background-color: #1f1f1f;
+    border-color: #4a4a4a;
+  }
+
+  .reason-badge {
+    background-color: #3b2f1a;
+    color: #f2c879;
   }
 }
