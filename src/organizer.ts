@@ -8,10 +8,10 @@ import type {
   DetectionReport,
   EncryptReport,
   ExecutionReport,
+  FolderEntry,
   OrganizePlan,
   OperationRequest,
   ProgressEvent,
-  ProposedOperation,
 } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -27,26 +27,44 @@ export interface OrganizerApi {
 }
 
 export function initOrganizer(): OrganizerApi {
-  const aiStatus = element<HTMLParagraphElement>("ai-status");
+  // Top & Header
+  const aiStatus = element<HTMLDivElement>("ai-status");
+  const folderName = element<HTMLDivElement>("folder-name");
+  const folderPath = element<HTMLDivElement>("folder-path");
   const pickButton = element<HTMLButtonElement>("pick-folder");
-  const folderPath = element<HTMLSpanElement>("folder-path");
+
+  // Sidebar Controls
   const instruction = element<HTMLTextAreaElement>("instruction");
   const planButton = element<HTMLButtonElement>("plan");
-  const progress = element<HTMLSpanElement>("progress");
-  const planPanel = element<HTMLElement>("plan-panel");
-  const planSummary = element<HTMLParagraphElement>("plan-summary");
-  const planOps = element<HTMLUListElement>("plan-ops");
-  const planWarnings = element<HTMLParagraphElement>("plan-warnings");
+  const progress = element<HTMLDivElement>("progress");
+
+  // Right Workspace Containers
+  const welcomePane = element<HTMLDivElement>("welcome-pane");
+  const dualPanes = element<HTMLDivElement>("dual-panes");
+  const sourcePaneTitle = element<HTMLSpanElement>("source-pane-title");
+  const sourcePaneCount = element<HTMLSpanElement>("source-pane-count");
+  const sourceFileList = element<HTMLUListElement>("source-file-list");
+
+  const targetPaneBadge = element<HTMLSpanElement>("target-pane-badge");
+  const planEmptyNote = element<HTMLDivElement>("plan-empty-note");
+  const planTreeContent = element<HTMLDivElement>("plan-tree-content");
+
+  // Footer Actions
+  const commanderFooter = element<HTMLDivElement>("commander-footer");
+  const footerSummary = element<HTMLDivElement>("footer-summary");
   const approveButton = element<HTMLButtonElement>("approve");
   const discardButton = element<HTMLButtonElement>("discard");
-  const reportPanel = element<HTMLElement>("report-panel");
+
+  // Results & Confidential Panels
+  const reportPanel = element<HTMLDivElement>("report-panel");
   const reportList = element<HTMLUListElement>("report");
   const scanButton = element<HTMLButtonElement>("scan");
   const resetButton = element<HTMLButtonElement>("reset");
-  const confidentialPanel = element<HTMLElement>("confidential-panel");
+
+  const confidentialPanel = element<HTMLDivElement>("confidential-panel");
   const confidentialStatus = element<HTMLParagraphElement>("confidential-status");
   const confidentialList = element<HTMLUListElement>("confidential-list");
-  const passphraseRow = element<HTMLElement>("passphrase-row");
+  const passphraseRow = element<HTMLDivElement>("passphrase-row");
   const passphraseInput = element<HTMLInputElement>("passphrase");
   const passphraseConfirm = element<HTMLInputElement>("passphrase-confirm");
   const encryptButton = element<HTMLButtonElement>("encrypt-selected");
@@ -58,6 +76,8 @@ export function initOrganizer(): OrganizerApi {
   let sessionPassphrase: string | null = null;
   let busy = false;
   let scanning = false;
+  let isPlanning = false;
+  let planRequestId = 0;
 
   function setProgress(message: string, isError = false): void {
     progress.textContent = message;
@@ -86,9 +106,10 @@ export function initOrganizer(): OrganizerApi {
   function refreshButtons(): void {
     const hasInstruction = instruction.value.trim().length > 0;
     const hasValidOperations = plan?.operations.some((operation) => operation.valid) ?? false;
+
     pickButton.disabled = busy;
     instruction.disabled = busy;
-    planButton.disabled = busy || !root || !hasInstruction;
+    planButton.disabled = isPlanning ? false : (busy || !root || !hasInstruction);
     discardButton.disabled = busy;
     resetButton.disabled = busy;
     approveButton.disabled = busy || !hasValidOperations;
@@ -102,14 +123,6 @@ export function initOrganizer(): OrganizerApi {
     refreshButtons();
   }
 
-  function show(panel: HTMLElement): void {
-    panel.classList.remove("hidden");
-  }
-
-  function hide(panel: HTMLElement): void {
-    panel.classList.add("hidden");
-  }
-
   function clearConfidential(): void {
     detection = null;
     sessionPassphrase = null;
@@ -117,7 +130,121 @@ export function initOrganizer(): OrganizerApi {
     encryptResults.replaceChildren();
     passphraseInput.value = "";
     passphraseConfirm.value = "";
-    hide(confidentialPanel);
+    confidentialPanel.classList.add("hidden");
+  }
+
+  function getFileIcon(name: string, isDir: boolean): string {
+    if (isDir) return "📁";
+    const lower = name.toLowerCase();
+
+    // PDFs
+    if (lower.endsWith(".pdf")) return "📕";
+    // Word / Text Documents
+    if (lower.match(/\.(docx?|odt|rtf|txt|md|pages)$/)) return "📄";
+    // Excel / Spreadsheets
+    if (lower.match(/\.(xlsx?|csv|tsv|ods|numbers)$/)) return "📊";
+    // Presentations
+    if (lower.match(/\.(pptx?|key|odp)$/)) return "📑";
+    // Images
+    if (lower.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff?|heic)$/)) return "🖼️";
+    // Videos
+    if (lower.match(/\.(mp4|mkv|mov|avi|webm|flv|wmv|m4v)$/)) return "🎬";
+    // Audio / Music
+    if (lower.match(/\.(mp3|wav|flac|aac|ogg|m4a|wma)$/)) return "🎵";
+    // Archives / Compressed
+    if (lower.match(/\.(zip|tar|gz|7z|rar|bz2|xz|iso)$/)) return "📦";
+    // Code & Config
+    if (lower.match(/\.(js|ts|tsx|jsx|rs|py|go|cpp|c|java|html|css|json|yaml|yml|toml|xml|sql|sh|ps1)$/)) return "📜";
+    // Encrypted / Keys / Credentials
+    if (lower.endsWith(".enc") || lower.match(/\.(key|pem|pub|crt|p12|kdbx)$/)) return "🔒";
+    // Executables / Installers
+    if (lower.match(/\.(exe|msi|dmg|app|deb|rpm)$/)) return "⚙️";
+
+    return "📄";
+  }
+
+  function renderSourceEntries(entries: FolderEntry[]): void {
+    sourceFileList.replaceChildren();
+    if (entries.length === 0) {
+      sourcePaneCount.textContent = "0 items";
+      const emptyLi = document.createElement("li");
+      emptyLi.className = "file-row";
+      emptyLi.textContent = "(Empty folder)";
+      sourceFileList.append(emptyLi);
+      return;
+    }
+
+    sourcePaneCount.textContent = `${entries.length} item(s)`;
+    for (const item of entries) {
+      const li = document.createElement("li");
+      li.className = "file-row";
+      
+      const icon = getFileIcon(item.name, item.isDir);
+
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = `${icon} ${item.name}`;
+
+      const sizeSpan = document.createElement("span");
+      sizeSpan.style.color = "var(--text-tertiary)";
+      sizeSpan.style.fontSize = "11px";
+      if (item.isDir) {
+        sizeSpan.textContent = "folder";
+      } else if (item.size < 1024) {
+        sizeSpan.textContent = `${item.size} B`;
+      } else if (item.size < 1024 * 1024) {
+        sizeSpan.textContent = `${(item.size / 1024).toFixed(1)} KB`;
+      } else {
+        sizeSpan.textContent = `${(item.size / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      li.append(nameSpan, sizeSpan);
+      sourceFileList.append(li);
+    }
+  }
+
+  async function loadFolder(selected: string): Promise<void> {
+    root = selected;
+    
+    // Extract base folder name
+    const parts = selected.split(/[/\\]/).filter(Boolean);
+    const leaf = parts[parts.length - 1] || selected;
+    folderName.textContent = leaf;
+    folderPath.textContent = selected;
+    folderPath.classList.remove("muted");
+
+    sourcePaneTitle.textContent = `Current Folder: ${leaf}/`;
+    
+    clearConfidential();
+    reportPanel.classList.add("hidden");
+    welcomePane.classList.add("hidden");
+    dualPanes.classList.remove("hidden");
+
+    // Load actual folder contents immediately
+    try {
+      const entries = await invoke<FolderEntry[]>("list_folder_contents", { root });
+      renderSourceEntries(entries);
+      setProgress("");
+    } catch (e) {
+      root = null; // Unset invalid / protected root
+      sourcePaneCount.textContent = "Access denied";
+      const errLi = document.createElement("li");
+      errLi.className = "file-row";
+      errLi.style.color = "var(--badge-skip-text)";
+      errLi.style.backgroundColor = "var(--badge-skip-bg)";
+      errLi.textContent = `⚠️ ${String(e)}`;
+      sourceFileList.replaceChildren(errLi);
+      setProgress(String(e), true);
+    }
+
+    // Clear previous plan preview
+    plan = null;
+    planEmptyNote.classList.remove("hidden");
+    planTreeContent.classList.add("hidden");
+    planTreeContent.replaceChildren();
+    targetPaneBadge.textContent = "Waiting for plan";
+    commanderFooter.classList.add("hidden");
+
+    refreshButtons();
   }
 
   async function chooseFolder(): Promise<void> {
@@ -125,58 +252,157 @@ export function initOrganizer(): OrganizerApi {
     if (typeof selected !== "string") {
       return;
     }
-    root = selected;
-    folderPath.textContent = selected;
-    folderPath.classList.remove("muted");
-    clearConfidential();
-    setProgress("");
-    refreshButtons();
+    await loadFolder(selected);
   }
 
-  function operationRow(operation: ProposedOperation): HTMLLIElement {
-    const row = document.createElement("li");
-    row.className = operation.valid ? "op" : "op invalid";
-    const label = document.createElement("span");
-    label.textContent = operation.description;
-    const badge = document.createElement("span");
-    badge.className = "badge";
-    badge.textContent = operation.valid ? "ready" : "skipped";
-    row.append(label, badge);
-    if (!operation.valid && operation.reason) {
-      const reason = document.createElement("span");
-      reason.className = "reason";
-      reason.textContent = operation.reason;
-      row.append(reason);
+  function renderTargetTree(current: OrganizePlan): void {
+    planEmptyNote.classList.add("hidden");
+    planTreeContent.classList.remove("hidden");
+    planTreeContent.replaceChildren();
+
+    // Group proposed operations into tree structure
+    const folders = new Map<string, string[]>();
+    const rootFiles: string[] = [];
+
+    for (const op of current.operations) {
+      if (op.tool === "move_file" && op.arguments && typeof op.arguments === "object") {
+        const dst = String((op.arguments as Record<string, unknown>).destination || "");
+        const parts = dst.split(/[/\\]/);
+        if (parts.length > 1) {
+          const folder = parts.slice(0, -1).join("/") + "/";
+          const file = parts[parts.length - 1];
+          if (!folders.has(folder)) {
+            folders.set(folder, []);
+          }
+          folders.get(folder)!.push(file);
+        } else {
+          rootFiles.push(dst);
+        }
+      } else if (op.tool === "create_folder" && op.arguments && typeof op.arguments === "object") {
+        const folder = String((op.arguments as Record<string, unknown>).path || "");
+        const formatted = folder.endsWith("/") ? folder : folder + "/";
+        if (!folders.has(formatted)) {
+          folders.set(formatted, []);
+        }
+      }
     }
-    return row;
+
+    if (folders.size === 0 && rootFiles.length === 0) {
+      targetPaneBadge.textContent = "No changes needed";
+      const emptyNote = document.createElement("div");
+      emptyNote.className = "pane-placeholder";
+      emptyNote.textContent = current.summary || "No operations proposed for this folder.";
+      planTreeContent.append(emptyNote);
+      commanderFooter.classList.add("hidden");
+      return;
+    }
+
+    folders.forEach((files, folderName) => {
+      const folderNode = document.createElement("div");
+      folderNode.style.marginBottom = "8px";
+
+      const folderHeader = document.createElement("div");
+      folderHeader.className = "file-tree-folder";
+      folderHeader.textContent = `📁 ${folderName}`;
+      folderNode.append(folderHeader);
+
+      for (const f of files) {
+        const leaf = document.createElement("div");
+        leaf.className = "file-tree-item";
+        const icon = getFileIcon(f, false);
+        leaf.textContent = `↳ ${icon} ${f}`;
+        folderNode.append(leaf);
+      }
+      planTreeContent.append(folderNode);
+    });
+
+    for (const f of rootFiles) {
+      const leaf = document.createElement("div");
+      leaf.className = "file-tree-item";
+      const icon = getFileIcon(f, false);
+      leaf.textContent = `${icon} ${f}`;
+      planTreeContent.append(leaf);
+    }
+
+    const validOps = current.operations.filter((op) => op.valid);
+    targetPaneBadge.textContent = `+${folders.size} folder(s), ${validOps.length} action(s)`;
+    
+    footerSummary.innerHTML = `Plan ready: <strong>${validOps.length} operations</strong> to organize.`;
+    commanderFooter.classList.remove("hidden");
   }
 
-  function renderPlan(current: OrganizePlan): void {
-    planSummary.textContent = current.summary;
-    planOps.replaceChildren(...current.operations.map(operationRow));
-    planWarnings.textContent = current.warnings.join(" ");
-    show(planPanel);
+  async function cancelPlan(): Promise<void> {
+    if (!isPlanning) {
+      return;
+    }
+    isPlanning = false;
+    planRequestId++;
+    try {
+      await invoke("cancel_plan");
+    } catch {
+      // Best effort cancel
+    }
+    plan = null;
+    planTreeContent.innerHTML = '<div class="pane-placeholder">Plan creation cancelled. Click "Generate Plan" to try again.</div>';
+    targetPaneBadge.textContent = "Cancelled";
+    setProgress("Planning cancelled by user.");
+    planButton.classList.remove("btn-cancel");
+    planButton.innerHTML = '<span>Generate Plan</span><span>→</span>';
+    setBusy(false);
   }
 
   async function makePlan(): Promise<void> {
+    if (isPlanning) {
+      void cancelPlan();
+      return;
+    }
     if (!root) {
       return;
     }
+    isPlanning = true;
+    const currentReqId = ++planRequestId;
     setBusy(true);
-    setProgress("Planning with the local model…");
-    hide(planPanel);
-    hide(reportPanel);
+    planButton.classList.add("btn-cancel");
+    planButton.innerHTML = '<span class="spinner"></span><span>✕ Cancel Planning</span>';
+    targetPaneBadge.textContent = "Analyzing…";
+    planEmptyNote.classList.add("hidden");
+    planTreeContent.classList.remove("hidden");
+    planTreeContent.innerHTML = `
+      <div class="planning-loader">
+        <div class="loader-spinner"></div>
+        <div class="loader-title">Analyzing folder & drafting plan…</div>
+        <div class="loader-sub">Reading files and determining target structure</div>
+      </div>
+    `;
+    setProgress("Analyzing folder and drafting tree…");
     clearConfidential();
+    reportPanel.classList.add("hidden");
+
     try {
-      plan = await invoke<OrganizePlan>("plan_organize", { root, instruction: instruction.value.trim() });
-      renderPlan(plan);
-      const validCount = plan.operations.filter((operation) => operation.valid).length;
-      setProgress(`Plan ready — ${validCount} of ${plan.operations.length} operation(s) can run.`);
+      const res = await invoke<OrganizePlan>("plan_organize", { root, instruction: instruction.value.trim() });
+      if (currentReqId !== planRequestId) {
+        return;
+      }
+      plan = res;
+      renderTargetTree(plan);
+
+      const validCount = plan.operations.filter((op) => op.valid).length;
+      setProgress(`Plan ready — ${validCount} operation(s) ready.`);
     } catch (error) {
+      if (currentReqId !== planRequestId) {
+        return;
+      }
       plan = null;
+      planTreeContent.innerHTML = `<div class="pane-placeholder">${String(error)}</div>`;
+      targetPaneBadge.textContent = "Plan failed";
       setProgress(String(error), true);
     } finally {
-      setBusy(false);
+      if (currentReqId === planRequestId) {
+        isPlanning = false;
+        planButton.classList.remove("btn-cancel");
+        planButton.innerHTML = '<span>Generate Plan</span><span>→</span>';
+        setBusy(false);
+      }
     }
   }
 
@@ -210,7 +436,8 @@ export function initOrganizer(): OrganizerApi {
       return;
     }
     setBusy(true);
-    setProgress("Executing the approved operations…");
+    approveButton.innerHTML = '<span class="spinner"></span><span>Executing…</span>';
+    setProgress("Executing the approved actions…");
     try {
       const report = await invoke<ExecutionReport>("execute_plan", {
         root,
@@ -218,8 +445,8 @@ export function initOrganizer(): OrganizerApi {
         operations,
       });
       renderReport(report);
-      hide(planPanel);
-      show(reportPanel);
+      reportPanel.classList.remove("hidden");
+      commanderFooter.classList.add("hidden");
       setProgress(`${report.okCount} succeeded, ${report.failedCount} failed.`, report.failedCount > 0);
       void refreshHistory();
       void scanConfidential();
@@ -227,6 +454,7 @@ export function initOrganizer(): OrganizerApi {
       setProgress(String(error), true);
     } finally {
       setBusy(false);
+      approveButton.textContent = "Execute";
     }
   }
 
@@ -235,7 +463,8 @@ export function initOrganizer(): OrganizerApi {
       return;
     }
     scanning = true;
-    show(confidentialPanel);
+    scanButton.innerHTML = '<span class="spinner spinner-dark"></span><span>Scanning…</span>';
+    confidentialPanel.classList.remove("hidden");
     setConfidentialStatus("Scanning for confidential files…");
     confidentialList.replaceChildren();
     encryptResults.replaceChildren();
@@ -248,6 +477,7 @@ export function initOrganizer(): OrganizerApi {
       setConfidentialStatus(`Scan failed — ${String(error)}`, true);
     } finally {
       scanning = false;
+      scanButton.textContent = "Scan for Confidential Files";
       refreshButtons();
     }
   }
@@ -288,7 +518,7 @@ export function initOrganizer(): OrganizerApi {
     confidentialList.replaceChildren(...rows);
     passphraseRow.classList.remove("hidden");
     setConfidentialStatus(
-      `${report.findings.length} of ${report.scanned} file(s) look confidential — review the reasons, then encrypt what you choose.${warnings}`,
+      `${report.findings.length} of ${report.scanned} file(s) look confidential — review reasons and set passphrase to encrypt.`,
     );
   }
 
@@ -318,7 +548,7 @@ export function initOrganizer(): OrganizerApi {
       renderEncryptResults(report);
       void refreshHistory();
       setConfidentialStatus(
-        `${report.okCount} file(s) encrypted, ${report.failedCount} failed. Use Decrypt to prove a file is recoverable.`,
+        `${report.okCount} file(s) encrypted, ${report.failedCount} failed. Use Decrypt to verify recovery.`,
         report.failedCount > 0,
       );
     } catch (error) {
@@ -345,7 +575,7 @@ export function initOrganizer(): OrganizerApi {
       if (result.ok && output) {
         const decryptButton = document.createElement("button");
         decryptButton.type = "button";
-        decryptButton.className = "button small";
+        decryptButton.className = "btn-default btn-small";
         decryptButton.textContent = "Decrypt";
         decryptButton.addEventListener("click", () => void decryptFile(output, row));
         row.append(decryptButton);
@@ -393,7 +623,11 @@ export function initOrganizer(): OrganizerApi {
 
   function discardPlan(): void {
     plan = null;
-    hide(planPanel);
+    planEmptyNote.classList.remove("hidden");
+    planTreeContent.classList.add("hidden");
+    planTreeContent.replaceChildren();
+    targetPaneBadge.textContent = "Plan discarded";
+    commanderFooter.classList.add("hidden");
     setProgress("Plan discarded — nothing was changed.");
     refreshButtons();
   }
@@ -403,31 +637,36 @@ export function initOrganizer(): OrganizerApi {
     plan = null;
     instruction.value = "";
     clearConfidential();
-    folderPath.textContent = "No folder selected";
+    folderName.textContent = "No folder selected";
+    folderPath.textContent = "Choose a folder to organize";
     folderPath.classList.add("muted");
-    hide(planPanel);
-    hide(reportPanel);
+    sourceFileList.replaceChildren();
+    welcomePane.classList.remove("hidden");
+    dualPanes.classList.add("hidden");
+    reportPanel.classList.add("hidden");
+    commanderFooter.classList.add("hidden");
     setProgress("");
     refreshButtons();
   }
 
-  // Used by the history rail: make a previous folder active again and offer its
-  // last instruction; nothing runs until the user asks for a plan.
   function selectRoot(nextRoot: string, nextInstruction = ""): void {
-    root = nextRoot;
-    folderPath.textContent = nextRoot;
-    folderPath.classList.remove("muted");
-    plan = null;
     if (nextInstruction.trim().length > 0) {
       instruction.value = nextInstruction;
     }
-    clearConfidential();
-    hide(planPanel);
-    hide(reportPanel);
-    setProgress("");
-    refreshButtons();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    void loadFolder(nextRoot);
   }
+
+  // Preset chips click
+  document.querySelectorAll<HTMLSpanElement>(".chip-btn").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const promptText = chip.dataset.prompt;
+      if (promptText) {
+        instruction.value = promptText;
+        refreshButtons();
+        instruction.focus();
+      }
+    });
+  });
 
   instruction.addEventListener("input", refreshButtons);
   passphraseInput.addEventListener("input", refreshButtons);
@@ -446,12 +685,18 @@ export function initOrganizer(): OrganizerApi {
   );
 
   void invoke<string>("check_ollama")
-    .then((message) => {
-      aiStatus.textContent = message;
-      aiStatus.classList.add("ok");
+    .then((_message) => {
+      const label = aiStatus.querySelector(".status-label");
+      if (label) {
+        label.textContent = "100% Local & Private";
+      }
+      aiStatus.classList.remove("error");
     })
     .catch((error: unknown) => {
-      aiStatus.textContent = `Local AI unavailable — ${String(error)}`;
+      const label = aiStatus.querySelector(".status-label");
+      if (label) {
+        label.textContent = `Offline engine not ready (${String(error)})`;
+      }
       aiStatus.classList.add("error");
     });
 

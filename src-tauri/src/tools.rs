@@ -144,6 +144,119 @@ pub fn describe(tool: &str, args: &Value) -> String {
     }
 }
 
+fn clean_canonical(path: &Path) -> PathBuf {
+    let s = path.to_string_lossy();
+    if let Some(stripped) = s.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{stripped}"))
+    } else if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(stripped)
+    } else {
+        path.to_path_buf()
+    }
+}
+
+pub fn validate_safe_root(canonical: &Path) -> Result<(), String> {
+    let clean = clean_canonical(canonical);
+
+    // 1. Block Drive Roots (e.g. C:\, D:\, /)
+    let normal_components = clean
+        .components()
+        .filter(|c| matches!(c, Component::Normal(_)))
+        .count();
+    if normal_components == 0 {
+        return Err(format!(
+            "Drive roots ('{}') cannot be organized directly. Please select a specific folder inside the drive.",
+            clean.display()
+        ));
+    }
+
+    // 2. Allow subdirectories inside standard Temp (used by unit tests and temporary scratch folders)
+    if let Ok(temp) = std::env::temp_dir().canonicalize() {
+        let clean_temp = clean_canonical(&temp);
+        if clean.starts_with(&clean_temp) && clean != clean_temp {
+            return Ok(());
+        }
+    }
+
+    // 3. Block User Profile Root directly (e.g. C:\Users\username or /home/username)
+    if let Ok(profile) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
+        if let Ok(profile_can) = PathBuf::from(profile).canonicalize() {
+            let clean_profile = clean_canonical(&profile_can);
+            if clean.to_string_lossy().eq_ignore_ascii_case(&clean_profile.to_string_lossy()) {
+                return Err(
+                    "Your entire user profile directory cannot be organized directly. Please select a specific subfolder (e.g. Downloads, Documents, Desktop, or a project folder).".into(),
+                );
+            }
+        }
+    }
+
+    // 4. Block System, Program, and AppData directories (and their subfolders)
+    let mut blocked_prefixes: Vec<PathBuf> = Vec::new();
+
+    // Windows system variables
+    for var in &[
+        "SystemRoot",
+        "windir",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramData",
+        "APPDATA",
+        "LOCALAPPDATA",
+    ] {
+        if let Ok(val) = std::env::var(var) {
+            if let Ok(can) = PathBuf::from(val).canonicalize() {
+                let clean_p = clean_canonical(&can);
+                blocked_prefixes.push(clean_p);
+            }
+        }
+    }
+
+    // AppData root folder (parent of Roaming/Local)
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        if let Some(parent) = PathBuf::from(appdata).parent() {
+            if let Ok(can) = parent.canonicalize() {
+                blocked_prefixes.push(clean_canonical(&can));
+            }
+        }
+    }
+
+    // Unix system folders
+    for unix_sys in &[
+        "/etc", "/usr", "/var", "/sys", "/proc", "/dev", "/boot", "/bin", "/sbin", "/root",
+    ] {
+        blocked_prefixes.push(PathBuf::from(unix_sys));
+    }
+
+    for blocked in blocked_prefixes {
+        let clean_str = clean.to_string_lossy().to_lowercase();
+        let blocked_str = blocked.to_string_lossy().to_lowercase();
+        if clean_str == blocked_str
+            || clean_str.starts_with(&format!("{blocked_str}\\"))
+            || clean_str.starts_with(&format!("{blocked_str}/"))
+        {
+            return Err(format!(
+                "'{}' is a protected system/application directory and cannot be selected.",
+                clean.display()
+            ));
+        }
+    }
+
+    // 4. Block sensitive credential folders (e.g. .ssh, .aws, .gnupg)
+    for comp in clean.components() {
+        if let Component::Normal(os_str) = comp {
+            let lower = os_str.to_string_lossy().to_lowercase();
+            if lower == ".ssh" || lower == ".aws" || lower == ".gnupg" {
+                return Err(format!(
+                    "Sensitive credential directory '{}' is protected and cannot be organized.",
+                    clean.display()
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Every resolved path must stay inside this root. The root is canonicalized
 /// once; existing paths are canonicalized before the prefix check so that `..`
 /// or symlinks cannot escape the chosen folder.
@@ -160,6 +273,7 @@ impl ScopedRoot {
         if !canonical.is_dir() {
             return Err(format!("{} is not a folder", root.display()));
         }
+        validate_safe_root(&canonical)?;
         Ok(Self { canonical })
     }
 
@@ -587,5 +701,34 @@ mod tests {
         assert!(execute_operation(&root, TOOL_MOVE_FILE, &json!({ "source": "keep.txt", "destination": "docs/a.txt" })).is_err());
         execute_operation(&root, TOOL_RENAME_FILE, &json!({ "path": "docs/a.txt", "new_name": "b.txt" })).unwrap();
         assert!(root.canonical().join("docs/b.txt").exists());
+    }
+
+    #[test]
+    fn safe_root_validation_rejects_protected_locations() {
+        // Safe temp directory should succeed
+        let dir = tempfile::tempdir().unwrap();
+        assert!(validate_safe_root(dir.path()).is_ok());
+
+        // Windows / System dirs if present
+        if let Ok(windir) = std::env::var("SystemRoot").or_else(|_| std::env::var("windir")) {
+            let path = PathBuf::from(windir);
+            if path.exists() {
+                assert!(validate_safe_root(&path).is_err(), "SystemRoot must be rejected");
+            }
+        }
+
+        // AppData if present
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let path = PathBuf::from(appdata);
+            if path.exists() {
+                assert!(validate_safe_root(&path).is_err(), "APPDATA must be rejected");
+            }
+        }
+
+        // Drive root simulation
+        #[cfg(windows)]
+        {
+            assert!(validate_safe_root(Path::new("C:\\")).is_err(), "Drive root C:\\ must be rejected");
+        }
     }
 }

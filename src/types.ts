@@ -1,3 +1,10 @@
+export interface FolderEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+}
+
 export interface ProposedOperation {
   tool: string;
   arguments: Record<string, unknown>;

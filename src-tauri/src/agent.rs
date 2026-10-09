@@ -35,6 +35,7 @@ pub async fn plan<F: Fn(String)>(
     root: &Path,
     instruction: &str,
     progress: &F,
+    mut cancel_rx: tokio::sync::watch::Receiver<bool>,
 ) -> Result<OrganizePlan, String> {
     let scoped = ScopedRoot::new(root)?;
     let root_display = root.display().to_string();
@@ -55,7 +56,18 @@ pub async fn plan<F: Fn(String)>(
             warnings.push(format!("Stopped inspecting after {MAX_INSPECT_STEPS} steps."));
             break;
         }
-        let response = client.chat(&messages, &read_tools, INSPECT_NUM_PREDICT).await?;
+        if *cancel_rx.borrow() {
+            return Err("Plan creation cancelled by user.".into());
+        }
+        let response = tokio::select! {
+            res = client.chat(&messages, &read_tools, INSPECT_NUM_PREDICT) => res?,
+            _ = cancel_rx.changed() => {
+                if *cancel_rx.borrow() {
+                    return Err("Plan creation cancelled by user.".into());
+                }
+                client.chat(&messages, &read_tools, INSPECT_NUM_PREDICT).await?
+            }
+        };
         let calls = response.tool_calls.clone().unwrap_or_default();
         if let Some(content) = response.content.as_deref() {
             let cleaned = sanitize_summary(content);
@@ -69,6 +81,9 @@ pub async fn plan<F: Fn(String)>(
         }
         steps += 1;
         for call in &calls {
+            if *cancel_rx.borrow() {
+                return Err("Plan creation cancelled by user.".into());
+            }
             progress(format!("Inspecting — {}", call.function.name));
             let content = run_inspect_tool(&scoped, call, &mut read_paths)
                 .unwrap_or_else(|error| format!("error: {error}"));
@@ -96,8 +111,26 @@ pub async fn plan<F: Fn(String)>(
         });
     }
 
+    if *cancel_rx.borrow() {
+        return Err("Plan creation cancelled by user.".into());
+    }
     progress("Proposing file operations…".to_string());
     messages.push(ChatMessage::user(PROPOSE_INSTRUCTION));
+        let mutation_tools = tools::mutation_tool_schemas();
+    let proposal = tokio::select! {
+        res = client.chat(&messages, &mutation_tools, PROPOSE_NUM_PREDICT) => res?,
+        _ = cancel_rx.changed() => {
+            if *cancel_rx.borrow() {
+                return Err("Plan creation cancelled by user.".into());
+            }
+            client.chat(&messages, &mutation_tools, PROPOSE_NUM_PREDICT).await?
+        }
+    };
+    let calls = proposal.tool_calls.clone().unwrap_or_default();
+    messages.push(proposal);
+
+    let mut operations: Vec<ProposedOperation> = calls
+
     let proposal = client.chat(&messages, &tools::mutation_tool_schemas(), PROPOSE_NUM_PREDICT).await?;
     let calls = proposal.tool_calls.clone().unwrap_or_default();
     messages.push(proposal);
@@ -230,6 +263,8 @@ fn sanitize_summary(text: &str) -> String {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .filter(|line| !(line.starts_with('{') && line.ends_with('}')))
+        .filter(|line| !line.starts_with("list_files") && !line.starts_with("read_file"))
+        .filter(|line| !line.starts_with("Contents of '") && !line.starts_with("Contents of \""))
         .collect::<Vec<_>>()
         .join(" ")
         .trim()
@@ -318,7 +353,8 @@ fn understand_prompt(root: &str) -> String {
          - Your only job is planning file organization (move, rename, create folder) inside the ROOT.\n\
          - Only files directly inside the ROOT (the top level) are in scope. Ignore the contents of subfolders — never read, move, rename, or delete anything inside them.\n\
          - Never miss a top-level file: review the whole list_files result and cover every file the instruction applies to before replying.\n\
-         - If the request is not about organizing files in the ROOT — for example a question, general knowledge, coding, or anything outside file organization — call NO tools and reply with exactly:\n\
+         - If the folder does not contain any files matching the user's rule, do not refuse the request; summarize politely that no matching files were found to organize.\n\
+         - Only if the request is completely unrelated to file organization (for example a question, general knowledge, chit-chat, or coding) should you call NO tools and reply with exactly:\n\
          {REFUSAL_MARKER} I can only organize files in the selected folder.\n\
          - Never answer questions or perform tasks outside file organization, even if asked directly.\n\n\
          Rules:\n\
@@ -410,11 +446,13 @@ mod tests {
         fs::write(dir.path().join("report.md"), b"# Q3 report").unwrap();
 
         let client = OllamaClient::new().unwrap();
+        let (_tx, rx) = tokio::sync::watch::channel(false);
         let plan = tauri::async_runtime::block_on(plan(
             &client,
             dir.path(),
             "Move all images into a new folder called Images.",
             &|message: String| eprintln!("[progress] {message}"),
+            rx,
         ))
         .unwrap();
 

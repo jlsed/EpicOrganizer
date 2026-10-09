@@ -20,15 +20,83 @@ fn emit_progress(app: &AppHandle, message: impl Into<String>) {
     let _ = app.emit("organize-progress", ProgressEvent { message: message.into() });
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: u64,
+}
+
 #[tauri::command]
-pub async fn plan_organize(app: AppHandle, root: String, instruction: String) -> Result<OrganizePlan, String> {
+pub fn list_folder_contents(root: String) -> Result<Vec<FolderEntry>, String> {
+    let scoped = ScopedRoot::new(&PathBuf::from(&root))?;
+    let read_dir = std::fs::read_dir(scoped.canonical())
+        .map_err(|e| format!("cannot read folder: {e}"))?;
+
+    let mut entries = Vec::new();
+    for entry in read_dir.filter_map(Result::ok) {
+        if let Ok(file_type) = entry.file_type() {
+            let path = scoped.display_rel(&entry.path());
+            let name = entry.file_name().to_string_lossy().to_string();
+            let size = if file_type.is_file() {
+                entry.metadata().map(|m| m.len()).unwrap_or(0)
+            } else {
+                0
+            };
+            entries.push(FolderEntry {
+                name,
+                path,
+                is_dir: file_type.is_dir(),
+                size,
+            });
+        }
+    }
+    entries.sort_by(|a, b| (!a.is_dir, a.name.to_lowercase()).cmp(&(!b.is_dir, b.name.to_lowercase())));
+    Ok(entries)
+}
+
+use std::sync::{Arc, Mutex};
+use tokio::sync::watch;
+
+#[derive(Default)]
+pub struct PlanCancelState(pub Arc<Mutex<Option<watch::Sender<bool>>>>);
+
+#[tauri::command]
+pub async fn plan_organize(
+    app: AppHandle,
+    state: tauri::State<'_, PlanCancelState>,
+    root: String,
+    instruction: String,
+) -> Result<OrganizePlan, String> {
     let instruction = instruction.trim().to_string();
     if instruction.is_empty() {
         return Err("Type what you want done with this folder first.".into());
     }
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    {
+        let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+        *guard = Some(cancel_tx);
+    }
     let client = OllamaClient::new()?;
     let progress = move |message: String| emit_progress(&app, message);
-    agent::plan(&client, &PathBuf::from(&root), &instruction, &progress).await
+    let result = agent::plan(&client, &PathBuf::from(&root), &instruction, &progress, cancel_rx).await;
+    {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = None;
+        }
+    }
+    result
+}
+
+#[tauri::command]
+pub fn cancel_plan(state: tauri::State<'_, PlanCancelState>) -> Result<(), String> {
+    let guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(ref sender) = *guard {
+        let _ = sender.send(true);
+    }
+    Ok(())
 }
 
 #[tauri::command]
