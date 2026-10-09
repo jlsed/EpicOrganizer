@@ -3,6 +3,7 @@ mod commands;
 mod crypto;
 mod detect;
 mod extract;
+mod history;
 mod ollama;
 mod tools;
 
@@ -16,7 +17,10 @@ pub fn run() {
             commands::check_ollama,
             commands::detect_confidential,
             commands::encrypt_files,
-            commands::decrypt_file
+            commands::decrypt_file,
+            commands::list_history,
+            commands::remove_history,
+            commands::clear_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

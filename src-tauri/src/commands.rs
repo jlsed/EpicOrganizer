@@ -5,10 +5,11 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use crate::agent::{self, OrganizePlan};
+use crate::crypto;
 use crate::detect::{self, DetectionReport};
+use crate::history;
 use crate::ollama::OllamaClient;
 use crate::tools::{self, ExecutionReport, OperationRequest, OperationResult, ScopedRoot};
-use crate::crypto;
 
 #[derive(Clone, Serialize)]
 struct ProgressEvent {
@@ -34,6 +35,7 @@ pub async fn plan_organize(app: AppHandle, root: String, instruction: String) ->
 pub async fn execute_plan(
     app: AppHandle,
     root: String,
+    instruction: String,
     operations: Vec<OperationRequest>,
 ) -> Result<ExecutionReport, String> {
     let scoped = ScopedRoot::new(&PathBuf::from(&root))?;
@@ -49,6 +51,7 @@ pub async fn execute_plan(
     }
     let ok_count = results.iter().filter(|result| result.ok).count();
     let failed_count = results.len() - ok_count;
+    history::record_organize(&app, &PathBuf::from(&root), instruction.trim(), ok_count, failed_count);
     emit_progress(&app, format!("Finished — {ok_count} succeeded, {failed_count} failed."));
     Ok(ExecutionReport { results, ok_count, failed_count })
 }
@@ -172,6 +175,12 @@ pub async fn encrypt_files(
     }
     let ok_count = results.iter().filter(|result| result.ok).count();
     let failed_count = results.len() - ok_count;
+    let sealed: Vec<String> = results
+        .iter()
+        .filter(|result| result.ok)
+        .filter_map(|result| result.output.clone())
+        .collect();
+    history::record_sealed(&app, &PathBuf::from(&root), &sealed);
     emit_confidential_progress(
         &app,
         format!("Encryption finished — {ok_count} succeeded, {failed_count} failed."),
@@ -192,6 +201,7 @@ pub struct DecryptFileResult {
 /// encrypted copy is kept; a wrong passphrase fails cleanly with no output.
 #[tauri::command]
 pub async fn decrypt_file(
+    app: AppHandle,
     root: String,
     path: String,
     passphrase: String,
@@ -207,6 +217,7 @@ pub async fn decrypt_file(
     }
     let file = scoped.resolve_existing(&rel)?;
     let outcome = crypto::decrypt_file(&file, &passphrase)?;
+    history::mark_restored(&app, &PathBuf::from(&root), &rel);
     Ok(DecryptFileResult {
         path: rel,
         output: scoped.display_rel(&outcome.output),
@@ -216,4 +227,19 @@ pub async fn decrypt_file(
             outcome.bytes
         ),
     })
+}
+
+#[tauri::command]
+pub async fn list_history(app: AppHandle) -> Result<Vec<history::HistoryEntryView>, String> {
+    history::list(&app)
+}
+
+#[tauri::command]
+pub async fn remove_history(app: AppHandle, root: String) -> Result<(), String> {
+    history::remove(&app, &root)
+}
+
+#[tauri::command]
+pub async fn clear_history(app: AppHandle) -> Result<(), String> {
+    history::clear(&app)
 }

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { refreshHistory } from "./history";
 import type {
   DecryptFileResult,
   DetectionReport,
@@ -21,7 +22,11 @@ function element<T extends HTMLElement>(id: string): T {
   return node as unknown as T;
 }
 
-export function initOrganizer(): void {
+export interface OrganizerApi {
+  selectRoot: (root: string, instruction?: string) => void;
+}
+
+export function initOrganizer(): OrganizerApi {
   const aiStatus = element<HTMLParagraphElement>("ai-status");
   const pickButton = element<HTMLButtonElement>("pick-folder");
   const folderPath = element<HTMLSpanElement>("folder-path");
@@ -207,11 +212,16 @@ export function initOrganizer(): void {
     setBusy(true);
     setProgress("Executing the approved operations…");
     try {
-      const report = await invoke<ExecutionReport>("execute_plan", { root, operations });
+      const report = await invoke<ExecutionReport>("execute_plan", {
+        root,
+        instruction: plan.instruction,
+        operations,
+      });
       renderReport(report);
       hide(planPanel);
       show(reportPanel);
       setProgress(`${report.okCount} succeeded, ${report.failedCount} failed.`, report.failedCount > 0);
+      void refreshHistory();
       void scanConfidential();
     } catch (error) {
       setProgress(String(error), true);
@@ -306,6 +316,7 @@ export function initOrganizer(): void {
       passphraseInput.value = "";
       passphraseConfirm.value = "";
       renderEncryptResults(report);
+      void refreshHistory();
       setConfidentialStatus(
         `${report.okCount} file(s) encrypted, ${report.failedCount} failed. Use Decrypt to prove a file is recoverable.`,
         report.failedCount > 0,
@@ -368,6 +379,7 @@ export function initOrganizer(): void {
       if (message) {
         message.textContent = result.message;
       }
+      void refreshHistory();
       setConfidentialStatus(`Recovered '${result.output}' from '${result.path}'.`);
     } catch (error) {
       if (message) {
@@ -399,6 +411,24 @@ export function initOrganizer(): void {
     refreshButtons();
   }
 
+  // Used by the history rail: make a previous folder active again and offer its
+  // last instruction; nothing runs until the user asks for a plan.
+  function selectRoot(nextRoot: string, nextInstruction = ""): void {
+    root = nextRoot;
+    folderPath.textContent = nextRoot;
+    folderPath.classList.remove("muted");
+    plan = null;
+    if (nextInstruction.trim().length > 0) {
+      instruction.value = nextInstruction;
+    }
+    clearConfidential();
+    hide(planPanel);
+    hide(reportPanel);
+    setProgress("");
+    refreshButtons();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   instruction.addEventListener("input", refreshButtons);
   passphraseInput.addEventListener("input", refreshButtons);
   passphraseConfirm.addEventListener("input", refreshButtons);
@@ -426,4 +456,5 @@ export function initOrganizer(): void {
     });
 
   refreshButtons();
+  return { selectRoot };
 }

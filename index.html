@@ -9,7 +9,17 @@
   </head>
 
   <body>
-    <main class="container">
+    <div class="app-shell">
+      <aside class="history-rail" aria-label="Organized folder history">
+        <h2 class="rail-title">History</h2>
+        <p id="history-empty" class="muted rail-empty">No folders organized yet.</p>
+        <ul id="history-list" class="history-list"></ul>
+        <div class="rail-footer">
+          <button id="clear-history" type="button" class="button small" disabled>Clear all</button>
+        </div>
+      </aside>
+
+      <main class="container">
       <header class="app-header">
         <h1>EpicOrganizer</h1>
         <p class="tagline">Local-AI file organizer — your files never leave this machine.</p>
@@ -82,6 +92,7 @@
         </div>
         <ul id="encrypt-results" class="ops"></ul>
       </section>
-    </main>
+      </main>
+    </div>
   </body>
 </html>
