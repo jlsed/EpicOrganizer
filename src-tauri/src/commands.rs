@@ -57,15 +57,46 @@ pub fn list_folder_contents(root: String) -> Result<Vec<FolderEntry>, String> {
     Ok(entries)
 }
 
+use std::sync::{Arc, Mutex};
+use tokio::sync::watch;
+
+#[derive(Default)]
+pub struct PlanCancelState(pub Arc<Mutex<Option<watch::Sender<bool>>>>);
+
 #[tauri::command]
-pub async fn plan_organize(app: AppHandle, root: String, instruction: String) -> Result<OrganizePlan, String> {
+pub async fn plan_organize(
+    app: AppHandle,
+    state: tauri::State<'_, PlanCancelState>,
+    root: String,
+    instruction: String,
+) -> Result<OrganizePlan, String> {
     let instruction = instruction.trim().to_string();
     if instruction.is_empty() {
         return Err("Type what you want done with this folder first.".into());
     }
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    {
+        let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+        *guard = Some(cancel_tx);
+    }
     let client = OllamaClient::new()?;
     let progress = move |message: String| emit_progress(&app, message);
-    agent::plan(&client, &PathBuf::from(&root), &instruction, &progress).await
+    let result = agent::plan(&client, &PathBuf::from(&root), &instruction, &progress, cancel_rx).await;
+    {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = None;
+        }
+    }
+    result
+}
+
+#[tauri::command]
+pub fn cancel_plan(state: tauri::State<'_, PlanCancelState>) -> Result<(), String> {
+    let guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(ref sender) = *guard {
+        let _ = sender.send(true);
+    }
+    Ok(())
 }
 
 #[tauri::command]

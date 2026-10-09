@@ -35,6 +35,7 @@ pub async fn plan<F: Fn(String)>(
     root: &Path,
     instruction: &str,
     progress: &F,
+    mut cancel_rx: tokio::sync::watch::Receiver<bool>,
 ) -> Result<OrganizePlan, String> {
     let scoped = ScopedRoot::new(root)?;
     let root_display = root.display().to_string();
@@ -55,7 +56,18 @@ pub async fn plan<F: Fn(String)>(
             warnings.push(format!("Stopped inspecting after {MAX_INSPECT_STEPS} steps."));
             break;
         }
-        let response = client.chat(&messages, &read_tools, INSPECT_NUM_PREDICT).await?;
+        if *cancel_rx.borrow() {
+            return Err("Plan creation cancelled by user.".into());
+        }
+        let response = tokio::select! {
+            res = client.chat(&messages, &read_tools, INSPECT_NUM_PREDICT) => res?,
+            _ = cancel_rx.changed() => {
+                if *cancel_rx.borrow() {
+                    return Err("Plan creation cancelled by user.".into());
+                }
+                client.chat(&messages, &read_tools, INSPECT_NUM_PREDICT).await?
+            }
+        };
         let calls = response.tool_calls.clone().unwrap_or_default();
         if let Some(content) = response.content.as_deref() {
             let cleaned = sanitize_summary(content);
@@ -69,6 +81,9 @@ pub async fn plan<F: Fn(String)>(
         }
         steps += 1;
         for call in &calls {
+            if *cancel_rx.borrow() {
+                return Err("Plan creation cancelled by user.".into());
+            }
             progress(format!("Inspecting — {}", call.function.name));
             let content = run_inspect_tool(&scoped, call, &mut read_paths)
                 .unwrap_or_else(|error| format!("error: {error}"));
@@ -96,9 +111,21 @@ pub async fn plan<F: Fn(String)>(
         });
     }
 
+    if *cancel_rx.borrow() {
+        return Err("Plan creation cancelled by user.".into());
+    }
     progress("Proposing file operations…".to_string());
     messages.push(ChatMessage::user(PROPOSE_INSTRUCTION));
-    let proposal = client.chat(&messages, &tools::mutation_tool_schemas(), PROPOSE_NUM_PREDICT).await?;
+    let mutation_tools = tools::mutation_tool_schemas();
+    let proposal = tokio::select! {
+        res = client.chat(&messages, &mutation_tools, PROPOSE_NUM_PREDICT) => res?,
+        _ = cancel_rx.changed() => {
+            if *cancel_rx.borrow() {
+                return Err("Plan creation cancelled by user.".into());
+            }
+            client.chat(&messages, &mutation_tools, PROPOSE_NUM_PREDICT).await?
+        }
+    };
     let calls = proposal.tool_calls.unwrap_or_default();
     if calls.len() > MAX_PROPOSED_OPERATIONS {
         warnings.push(format!("Kept the first {MAX_PROPOSED_OPERATIONS} proposed operations."));
@@ -333,11 +360,13 @@ mod tests {
         fs::write(dir.path().join("report.md"), b"# Q3 report").unwrap();
 
         let client = OllamaClient::new().unwrap();
+        let (_tx, rx) = tokio::sync::watch::channel(false);
         let plan = tauri::async_runtime::block_on(plan(
             &client,
             dir.path(),
             "Move all images into a new folder called Images.",
             &|message: String| eprintln!("[progress] {message}"),
+            rx,
         ))
         .unwrap();
 

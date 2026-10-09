@@ -76,6 +76,8 @@ export function initOrganizer(): OrganizerApi {
   let sessionPassphrase: string | null = null;
   let busy = false;
   let scanning = false;
+  let isPlanning = false;
+  let planRequestId = 0;
 
   function setProgress(message: string, isError = false): void {
     progress.textContent = message;
@@ -107,7 +109,7 @@ export function initOrganizer(): OrganizerApi {
 
     pickButton.disabled = busy;
     instruction.disabled = busy;
-    planButton.disabled = busy || !root || !hasInstruction;
+    planButton.disabled = isPlanning ? false : (busy || !root || !hasInstruction);
     discardButton.disabled = busy;
     resetButton.disabled = busy;
     approveButton.disabled = busy || !hasValidOperations;
@@ -325,12 +327,39 @@ export function initOrganizer(): OrganizerApi {
     commanderFooter.classList.remove("hidden");
   }
 
+  async function cancelPlan(): Promise<void> {
+    if (!isPlanning) {
+      return;
+    }
+    isPlanning = false;
+    planRequestId++;
+    try {
+      await invoke("cancel_plan");
+    } catch {
+      // Best effort cancel
+    }
+    plan = null;
+    planTreeContent.innerHTML = '<div class="pane-placeholder">Plan creation cancelled. Click "Generate Plan" to try again.</div>';
+    targetPaneBadge.textContent = "Cancelled";
+    setProgress("Planning cancelled by user.");
+    planButton.classList.remove("btn-cancel");
+    planButton.innerHTML = '<span>Generate Plan</span><span>→</span>';
+    setBusy(false);
+  }
+
   async function makePlan(): Promise<void> {
+    if (isPlanning) {
+      void cancelPlan();
+      return;
+    }
     if (!root) {
       return;
     }
+    isPlanning = true;
+    const currentReqId = ++planRequestId;
     setBusy(true);
-    planButton.innerHTML = '<span class="spinner"></span><span>Planning…</span>';
+    planButton.classList.add("btn-cancel");
+    planButton.innerHTML = '<span class="spinner"></span><span>✕ Cancel Planning</span>';
     targetPaneBadge.textContent = "Analyzing…";
     planEmptyNote.classList.add("hidden");
     planTreeContent.classList.remove("hidden");
@@ -346,19 +375,30 @@ export function initOrganizer(): OrganizerApi {
     reportPanel.classList.add("hidden");
 
     try {
-      plan = await invoke<OrganizePlan>("plan_organize", { root, instruction: instruction.value.trim() });
+      const res = await invoke<OrganizePlan>("plan_organize", { root, instruction: instruction.value.trim() });
+      if (currentReqId !== planRequestId) {
+        return;
+      }
+      plan = res;
       renderTargetTree(plan);
 
       const validCount = plan.operations.filter((op) => op.valid).length;
       setProgress(`Plan ready — ${validCount} operation(s) ready.`);
     } catch (error) {
+      if (currentReqId !== planRequestId) {
+        return;
+      }
       plan = null;
       planTreeContent.innerHTML = `<div class="pane-placeholder">${String(error)}</div>`;
       targetPaneBadge.textContent = "Plan failed";
       setProgress(String(error), true);
     } finally {
-      setBusy(false);
-      planButton.innerHTML = '<span>Generate Plan</span><span>→</span>';
+      if (currentReqId === planRequestId) {
+        isPlanning = false;
+        planButton.classList.remove("btn-cancel");
+        planButton.innerHTML = '<span>Generate Plan</span><span>→</span>';
+        setBusy(false);
+      }
     }
   }
 
