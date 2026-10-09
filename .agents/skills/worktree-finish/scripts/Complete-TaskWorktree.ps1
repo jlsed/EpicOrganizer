@@ -174,8 +174,9 @@ function Remove-TaskWorktree([string]$MainRepo, [string]$Path, $StopCommand) {
         if ($StopCommand) { $cmd = @($StopCommand) }
         elseif (Test-Path (Join-Path $Path 'gradlew.bat')) { $cmd = @('./gradlew.bat', '--stop') }
         if ($cmd.Count -gt 0) {
+            $cmdArgs = @($cmd | Select-Object -Skip 1)
             Push-Location $Path
-            try { & $cmd[0] @($cmd | Select-Object -Skip 1) 2>$null | Out-Null } catch { } finally { Pop-Location }
+            try { & $cmd[0] @cmdArgs 2>$null | Out-Null } catch { } finally { Pop-Location }
         }
         Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -187,8 +188,9 @@ function Invoke-ConfiguredCommand([string]$Label, $Command, [string]$WorkingDir)
     $arr = @($Command)
     if ($arr.Count -eq 0) { return }
     Write-Host "Running $Label ($($arr -join ' ')) ..."
+    $cmdArgs = @($arr | Select-Object -Skip 1)
     Push-Location $WorkingDir
-    try { & $arr[0] @($arr | Select-Object -Skip 1) } finally { Pop-Location }
+    try { & $arr[0] @cmdArgs } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "$Label failed (exit $LASTEXITCODE)." }
 }
 

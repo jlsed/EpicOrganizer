@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { refreshHistory } from "./history";
 import type {
   DecryptFileResult,
   DetectionReport,
@@ -21,7 +22,11 @@ function element<T extends HTMLElement>(id: string): T {
   return node as unknown as T;
 }
 
-export function initOrganizer(): void {
+export interface OrganizerApi {
+  selectRoot: (root: string, instruction?: string) => void;
+}
+
+export function initOrganizer(): OrganizerApi {
   // Top & Header
   const aiStatus = element<HTMLDivElement>("ai-status");
   const folderName = element<HTMLDivElement>("folder-name");
@@ -195,11 +200,7 @@ export function initOrganizer(): void {
     }
   }
 
-  async function chooseFolder(): Promise<void> {
-    const selected = await open({ directory: true, multiple: false, title: "Choose the folder to organize" });
-    if (typeof selected !== "string") {
-      return;
-    }
+  async function loadFolder(selected: string): Promise<void> {
     root = selected;
     
     // Extract base folder name
@@ -238,6 +239,14 @@ export function initOrganizer(): void {
 
     setProgress("");
     refreshButtons();
+  }
+
+  async function chooseFolder(): Promise<void> {
+    const selected = await open({ directory: true, multiple: false, title: "Choose the folder to organize" });
+    if (typeof selected !== "string") {
+      return;
+    }
+    await loadFolder(selected);
   }
 
   function renderTargetTree(current: OrganizePlan): void {
@@ -369,11 +378,16 @@ export function initOrganizer(): void {
     setBusy(true);
     setProgress("Executing the approved actions…");
     try {
-      const report = await invoke<ExecutionReport>("execute_plan", { root, operations });
+      const report = await invoke<ExecutionReport>("execute_plan", {
+        root,
+        instruction: plan.instruction,
+        operations,
+      });
       renderReport(report);
       reportPanel.classList.remove("hidden");
       commanderFooter.classList.add("hidden");
       setProgress(`${report.okCount} succeeded, ${report.failedCount} failed.`, report.failedCount > 0);
+      void refreshHistory();
       void scanConfidential();
     } catch (error) {
       setProgress(String(error), true);
@@ -468,6 +482,7 @@ export function initOrganizer(): void {
       passphraseInput.value = "";
       passphraseConfirm.value = "";
       renderEncryptResults(report);
+      void refreshHistory();
       setConfidentialStatus(
         `${report.okCount} file(s) encrypted, ${report.failedCount} failed. Use Decrypt to verify recovery.`,
         report.failedCount > 0,
@@ -530,6 +545,7 @@ export function initOrganizer(): void {
       if (message) {
         message.textContent = result.message;
       }
+      void refreshHistory();
       setConfidentialStatus(`Recovered '${result.output}' from '${result.path}'.`);
     } catch (error) {
       if (message) {
@@ -567,6 +583,13 @@ export function initOrganizer(): void {
     commanderFooter.classList.add("hidden");
     setProgress("");
     refreshButtons();
+  }
+
+  function selectRoot(nextRoot: string, nextInstruction = ""): void {
+    if (nextInstruction.trim().length > 0) {
+      instruction.value = nextInstruction;
+    }
+    void loadFolder(nextRoot);
   }
 
   // Preset chips click
@@ -614,4 +637,5 @@ export function initOrganizer(): void {
     });
 
   refreshButtons();
+  return { selectRoot };
 }

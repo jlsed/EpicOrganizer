@@ -18,5 +18,5 @@ Files pile up and manual organizing is tedious. Existing AI organizers send file
 
 ## Scope boundaries
 
-- In scope: desktop app; folder-scoped organization; script tools (list/read/move/create/rename); confidential detection; encryption on approval.
+- In scope: desktop app; folder-scoped organization; script tools (list/read/move/create/rename); confidential detection; encryption on approval; history of organized folders with sealed-file recovery (passphrase never stored).
 - Out of scope (hackathon): cloud sync, multi-user, mobile, scheduled/background automation, full undo/versioning beyond basic reporting.

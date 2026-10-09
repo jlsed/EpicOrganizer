@@ -10,10 +10,11 @@
 | Native dialogs | `tauri-plugin-dialog` | 2.8.1 | folder picker; `dialog:default` capability; added in M2 |
 | Crypto | AES-256-GCM + Argon2id (`aes-gcm`, `argon2`) | 0.11.1 / 0.6.0 | passphrase envelope; `zeroize` 1.9.1 + `getrandom` 0.4; added in M3 |
 | Content extraction | `pdf-extract` 0.12.1 + `zip` 9.0.0 (deflate only) + `quick-xml` 0.42.0 | — | M3: text/PDF/docx; truncated (4 KiB) before the model; image-only PDFs yield no text |
+| History store | Rust JSON in the app-data dir | — | `%APPDATA%\com.epicorganizer.app\history.json`; last 50 organized folders + sealed-file (`sealed`/`restored`) state; canonical case-folded key; atomic write; no new crates (M4) |
 | Local AI (demo) | Llama 3.2 3B via Ollama | 3B Q4 | 2.0 GB disk, ~2.6 GB RAM loaded, ~7 tok/s on this machine (measured 2026-10-09) |
 | Local AI (target) | Llama 3.1 8B | 8B | drop-in upgrade on GPU hardware; same Ollama runtime |
 | Database | none expected | — | hackathon scope; settings/state only if needed |
-| Testing | Rust unit tests + ignored live smoke | — | `cargo test` (28 unit tests + 2 ignored live smokes); live smoke `cargo test -- --ignored` needs Ollama; configured gate = `npm run build` |
+| Testing | Rust unit tests + ignored live smoke | — | `cargo test` (38 unit tests + 2 ignored live smokes); live smoke `cargo test -- --ignored` needs Ollama; configured gate = `npm run build` |
 
 ## Implementation decisions (locked 2026-10-09)
 

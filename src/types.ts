@@ -73,3 +73,20 @@ export interface DecryptFileResult {
   ok: boolean;
   message: string;
 }
+
+export interface SealedFileEntry {
+  path: string;
+  sealedAt: number;
+  restored: boolean;
+  exists: boolean;
+}
+
+export interface HistoryEntry {
+  root: string;
+  lastOrganized: number;
+  lastInstruction: string;
+  opsOk: number;
+  opsFailed: number;
+  sealed: SealedFileEntry[];
+  exists: boolean;
+}

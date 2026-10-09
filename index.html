@@ -26,9 +26,21 @@
         </div>
       </header>
 
-      <!-- App Body Grid -->
+      <!-- App Body Grid (3-column: History Rail | Control Sidebar | Dual-Pane Workspace) -->
       <div class="app-body">
-        <!-- Left Sidebar: Controls & Instructions -->
+        <!-- History Rail -->
+        <aside class="history-rail" aria-label="Organized folder history">
+          <div class="rail-header">
+            <h2 class="rail-title">History</h2>
+          </div>
+          <p id="history-empty" class="muted rail-empty">No folders organized yet.</p>
+          <ul id="history-list" class="history-list"></ul>
+          <div class="rail-footer">
+            <button id="clear-history" type="button" class="btn-default btn-small w-full" disabled>Clear all</button>
+          </div>
+        </aside>
+
+        <!-- Sidebar: Controls & Instructions -->
         <div class="sidebar-control">
           <div>
             <div class="section-title">1. Source Folder</div>
@@ -75,7 +87,7 @@
             <div class="empty-icon">🗂️</div>
             <div class="empty-title">Ready to Organize</div>
             <div class="empty-desc">
-              Select a source folder on the left, then describe your rule or click a preset chip to preview the resulting structure before moving files.
+              Select a source folder on the left or click an entry in your history, then describe your rule or click a preset chip to preview the resulting structure before moving files.
             </div>
           </div>
 
