@@ -2,6 +2,7 @@
 
 ## Current Phase
 
+- 2026-10-09 — M2 organize flow landed (task `2026-10-09-m2-organize-flow`, branch `task/m2-organize-flow`): four-stage UI (folder → instruction → review → report), Rust modules `ollama.rs` / `tools.rs` / `agent.rs` / `commands.rs`, dialog plugin + `dialog:default` capability, commands `plan_organize` / `execute_plan` / `check_ollama`. Deps added: `tauri-plugin-dialog` 2.8.1, `reqwest` 0.13.5 (json, no TLS), dev `tempfile` 3.27.0; npm `@tauri-apps/plugin-dialog`. Live smoke on Ollama `llama3.2:3b` passed (plan → approve → execute), dev window smoke passed, and `npm run tauri build` produced MSI + NSIS installers. Next: M3 (detect + encrypt; PDF/docx extraction lands here).
 - 2026-10-09 — Tauri scaffold landed (task `2026-10-09-scaffold-tauri-app`, branch `task/scaffold-tauri-app`): vanilla-ts + Tauri v2 (`com.epicorganizer.app`), placeholder shell wired to Rust via `greet`; `npm run build`, `cargo check`, and a `tauri dev` window check all pass. Resolved deps: @tauri-apps/api 2.12.2, @tauri-apps/cli 2.12.1, tauri 2.12.2, tauri-build 2.7.1, vite 8.3.4, typescript 6.0.3 (node 22.14.0, rustc 1.94.0). Next: owner fills `commands` in `worktree.config.json` on main after review, then M2 (organize flow) starts from this scaffold.
 - 2026-10-09 (hackathon day): all pre-build decisions locked (product, stack, runtime, webview, crypto, protocol, scope, content reading). No code yet. Next: scaffold Tauri and build.
 
@@ -25,7 +26,7 @@
 
 ## Next Step
 
-- Fill `commands` in `worktree.config.json` on main (proposed values in `techContext.md` → Tooling & commands), then build M2–M4 from the scaffold.
+- Add `stop` to `commands` in `worktree.config.json` (`test`/`release` configured in `fa8f0df`), then build M3 (detect + encrypt; PDF/docx extraction) and M4 (demo polish / offline proof).
 
 ## Learnings & Preferences
 
@@ -34,3 +35,8 @@
 - `tauri::generate_context!` validates `frontendDist` at compile time → run the frontend build before `cargo check` (the proposed `commands.test` reflects this ordering).
 - `cargo check` does not link; the `tauri dev` smoke test is the first real link + window check. Cold timings on this machine: check ≈2m40s, dev link ≈2m14s.
 - Dev smoke recipe: `Get-Process epicorganizer` + `MainWindowTitle`, then `taskkill /PID <npm-pid> /T /F`; verify port 1420 is free afterwards.
+- `llama3.2:3b` generates unbounded text unless capped — set `options.num_predict` per phase (inspect 384 / propose 1024); one turn ran 1,920 tokens and hit the 300 s client timeout.
+- Verify Ollama residency via `GET /api/ps` / the `llama-server` process; `check_ollama` warms the model with an empty `/api/generate` + `keep_alive` (30m).
+- Windows `canonicalize` returns `\\?\` paths — canonicalize both sides before `starts_with`; skip symlinks in directory listings so they cannot expose content outside the root.
+- `cargo test` also compiles `tauri::generate_context!`, so `npm run build` must precede *any* cargo command, not just `cargo check`.
+- llama3.2:3b tool discipline is weak ("only images" not always obeyed; invents file names) — plan-time validation marks nonexistent targets invalid and the user reviews before execution; consider the 8B model for the GPU demo.

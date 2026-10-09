@@ -10,11 +10,51 @@
 
   <body>
     <main class="container">
-      <h1>EpicOrganizer</h1>
-      <p class="tagline">
-        Local-AI file organizer — your files never leave this machine.
-      </p>
-      <p id="backend-status" class="status">Connecting to the Rust core…</p>
+      <header class="app-header">
+        <h1>EpicOrganizer</h1>
+        <p class="tagline">Local-AI file organizer — your files never leave this machine.</p>
+        <p id="ai-status" class="status">Checking local AI…</p>
+      </header>
+
+      <section class="panel" aria-labelledby="step-folder">
+        <h2 id="step-folder">1 · Choose a folder</h2>
+        <div class="row">
+          <button id="pick-folder" type="button" class="button">Choose folder…</button>
+          <span id="folder-path" class="path muted">No folder selected</span>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="step-instruction">
+        <h2 id="step-instruction">2 · Describe the organization</h2>
+        <textarea
+          id="instruction"
+          rows="3"
+          placeholder="e.g. Move all images into an Images folder and group documents by year"
+        ></textarea>
+        <div class="row">
+          <button id="plan" type="button" class="button primary" disabled>Plan with local AI</button>
+          <span id="progress" class="progress muted"></span>
+        </div>
+      </section>
+
+      <section id="plan-panel" class="panel hidden" aria-labelledby="step-review">
+        <h2 id="step-review">3 · Review the plan</h2>
+        <p id="plan-summary" class="summary"></p>
+        <ul id="plan-ops" class="ops"></ul>
+        <p id="plan-warnings" class="warnings"></p>
+        <div class="row">
+          <button id="approve" type="button" class="button primary" disabled>Approve &amp; execute</button>
+          <button id="discard" type="button" class="button" disabled>Discard</button>
+        </div>
+      </section>
+
+      <section id="report-panel" class="panel hidden" aria-labelledby="step-report">
+        <h2 id="step-report">4 · Result</h2>
+        <ul id="report" class="ops"></ul>
+        <div class="row">
+          <button id="reset" type="button" class="button">Organize another folder</button>
+        </div>
+      </section>
     </main>
   </body>
 </html>

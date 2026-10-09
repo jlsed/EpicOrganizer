@@ -21,6 +21,7 @@ Flow: user instruction → AI loops via tool calls (list/read) → each call val
 
 - Tools: `list_files`, `read_file` (truncated), `create_folder`, `move_file`, `rename_file`, `encrypt_file`.
 - Loop: model emits `tool_calls` → Rust validates (schema + canonicalized path stays under the chosen root + tool allowlist) → executes → returns results as tool messages → repeat; cap ≈20 iterations, then the model summarizes.
+- M2 implementation: inspect phase runs read-only tools (cap 8 steps, repeated reads deduped) and a single propose turn emits mutation `tool_calls` that are intercepted and validated — nothing executes until the user approves; `execute_plan` re-validates every op on the way in. Generation is capped per phase (`num_predict` 384 inspect / 1024 propose).
 - `encrypt_file` never auto-runs: the UI shows the pending list and requires an explicit yes; the passphrase is collected once per session (never logged, zeroized after use).
 - File content sent to the model is truncated (e.g. first ~4 KB) to fit the model's 4k context.
 

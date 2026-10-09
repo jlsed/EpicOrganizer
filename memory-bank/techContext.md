@@ -6,12 +6,14 @@
 | --- | --- | --- | --- |
 | Shell / UI | Tauri (desktop) + `vanilla-ts` webview | 2.12 (cli 2.12.1 / api 2.12.2) | no JS framework; scaffolded 2026-10-09 |
 | Core backend | Rust | 1.94 (rustc/cargo) | file ops, tool execution, orchestration glue |
+| Local AI client | `reqwest` (no default features + `json`) | 0.13.5 | HTTP to Ollama `127.0.0.1:11434`; added in M2 |
+| Native dialogs | `tauri-plugin-dialog` | 2.8.1 | folder picker; `dialog:default` capability; added in M2 |
 | Crypto | AES-256-GCM + Argon2id (`aes-gcm`, `argon2`) | TBD | passphrase envelope; user enters a password to encrypt/decrypt |
-| Content extraction | Rust crates (TBD: `pdf-extract`, `docx-rust`/`quick-xml`) | TBD | text files native; PDF + docx extracted, truncated before the model |
+| Content extraction | Rust crates (TBD: `pdf-extract`, `docx-rust`/`quick-xml`) | TBD | M2: text-like files only (truncated before the model); PDF + docx extraction deferred to M3 |
 | Local AI (demo) | Llama 3.2 3B via Ollama | 3B Q4 | 2.0 GB disk, ~2.6 GB RAM loaded, ~7 tok/s on this machine (measured 2026-10-09) |
 | Local AI (target) | Llama 3.1 8B | 8B | drop-in upgrade on GPU hardware; same Ollama runtime |
 | Database | none expected | — | hackathon scope; settings/state only if needed |
-| Testing | TBD | | |
+| Testing | Rust unit tests + ignored live smoke | — | `cargo test` (14 unit tests); live smoke `cargo test -- --ignored` needs Ollama; configured gate = `npm run build` |
 
 ## Implementation decisions (locked 2026-10-09)
 
@@ -28,20 +30,21 @@
 - Tool calling: emits valid structured `tool_calls` JSON (validated against a `move_file` schema). Needs a `list_files` tool + prompt discipline so it doesn't guess paths.
 - Confidential detection: correct JSON verdict on an SSN/bank-account sample.
 - Demo tip: keep the model resident (Ollama `keep_alive`) to avoid cold-load pauses.
+- M2 loop (measured while building, `llama3.2:3b` resident): inspect cap 8 steps + repeated-read dedupe; propose turn cap 100 ops; `num_ctx` 4096, `num_predict` 384 (inspect) / 1024 (propose); 300 s per-request timeout. Live plan+execute ≈61–115 s per demo folder.
+- `check_ollama` warms the model (`/api/generate` + `keep_alive` 30m) so the first plan does not pay cold load.
 
 ## Tooling & commands
 
-Scaffold exists (2026-10-09, `task/scaffold-tauri-app`). Proposed `commands` for `worktree.config.json` — owner applies on main after review:
+Configured in `worktree.config.json` (commit `fa8f0df`):
 
 ```json
 "commands": {
-  "test": "npm run build && cargo check --manifest-path src-tauri/Cargo.toml",
-  "release": "npm run tauri build",
-  "stop": "taskkill /F /IM epicorganizer.exe /T"
+  "test": ["npm", "run", "build"],
+  "release": ["npm", "run", "tauri", "build"]
 }
 ```
 
-`test` builds the frontend first because `tauri::generate_context!` requires `dist/` to exist; `stop` only matters if a dev app is left running and locks the worktree at teardown.
+`test` must run before any cargo command (`tauri::generate_context!` requires `dist/`). `stop` is not configured yet — add `["taskkill", "/F", "/IM", "epicorganizer.exe", "/T"]` so teardown can stop a locked dev app. `cargo check` and `cargo test` are task-acceptance/manual checks, not part of the gate.
 
 ## Constraints
 
@@ -52,5 +55,5 @@ Scaffold exists (2026-10-09, `task/scaffold-tauri-app`). Proposed `commands` for
 
 ## Checklist
 
-- [ ] Fill `commands` (`test` / `release` / `stop`) in `worktree.config.json` once the scaffold exists
-- [ ] Write ADRs for the locked decisions (stack trio; encryption approach) once they are final
+- [ ] Fill `commands` (`test` / `release` / `stop`) in `worktree.config.json` once the scaffold exists — partial, verified 2026-10-09: `test`/`release` configured in `fa8f0df`; `stop` still missing.
+- [ ] Write ADRs for the locked decisions (stack trio; encryption approach) once they are final — verified 2026-10-09: `docs/adr/` holds only `.gitkeep`; no ADRs written.
