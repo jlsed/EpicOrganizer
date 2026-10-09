@@ -2,6 +2,7 @@
 
 ## Current Phase
 
+- 2026-10-09 — Tauri scaffold landed (task `2026-10-09-scaffold-tauri-app`, branch `task/scaffold-tauri-app`): vanilla-ts + Tauri v2 (`com.epicorganizer.app`), placeholder shell wired to Rust via `greet`; `npm run build`, `cargo check`, and a `tauri dev` window check all pass. Resolved deps: @tauri-apps/api 2.12.2, @tauri-apps/cli 2.12.1, tauri 2.12.2, tauri-build 2.7.1, vite 8.3.4, typescript 6.0.3 (node 22.14.0, rustc 1.94.0). Next: owner fills `commands` in `worktree.config.json` on main after review, then M2 (organize flow) starts from this scaffold.
 - 2026-10-09 (hackathon day): all pre-build decisions locked (product, stack, runtime, webview, crypto, protocol, scope, content reading). No code yet. Next: scaffold Tauri and build.
 
 ## Locked Decisions (2026-10-09)
@@ -24,4 +25,12 @@
 
 ## Next Step
 
-- Scaffold Tauri (`vanilla-ts`), fill `commands` in `worktree.config.json`, then build M2–M4.
+- Fill `commands` in `worktree.config.json` on main (proposed values in `techContext.md` → Tooling & commands), then build M2–M4 from the scaffold.
+
+## Learnings & Preferences
+
+- `create-tauri-app` 4.7.4 vanilla-ts emits no `public/` dir — static assets live under `src/assets/`.
+- Dropping the template's unused `tauri-plugin-opener` requires removing all four touchpoints together (Cargo.toml dep, `.plugin()` call, `opener:default` capability, npm dep); a leftover permission fails at runtime.
+- `tauri::generate_context!` validates `frontendDist` at compile time → run the frontend build before `cargo check` (the proposed `commands.test` reflects this ordering).
+- `cargo check` does not link; the `tauri dev` smoke test is the first real link + window check. Cold timings on this machine: check ≈2m40s, dev link ≈2m14s.
+- Dev smoke recipe: `Get-Process epicorganizer` + `MainWindowTitle`, then `taskkill /PID <npm-pid> /T /F`; verify port 1420 is free afterwards.

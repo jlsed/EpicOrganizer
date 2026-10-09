@@ -4,8 +4,8 @@
 
 | Layer | Choice | Version | Notes |
 | --- | --- | --- | --- |
-| Shell / UI | Tauri (desktop) + `vanilla-ts` webview | TBD | no JS framework |
-| Core backend | Rust | TBD | file ops, tool execution, orchestration glue |
+| Shell / UI | Tauri (desktop) + `vanilla-ts` webview | 2.12 (cli 2.12.1 / api 2.12.2) | no JS framework; scaffolded 2026-10-09 |
+| Core backend | Rust | 1.94 (rustc/cargo) | file ops, tool execution, orchestration glue |
 | Crypto | AES-256-GCM + Argon2id (`aes-gcm`, `argon2`) | TBD | passphrase envelope; user enters a password to encrypt/decrypt |
 | Content extraction | Rust crates (TBD: `pdf-extract`, `docx-rust`/`quick-xml`) | TBD | text files native; PDF + docx extracted, truncated before the model |
 | Local AI (demo) | Llama 3.2 3B via Ollama | 3B Q4 | 2.0 GB disk, ~2.6 GB RAM loaded, ~7 tok/s on this machine (measured 2026-10-09) |
@@ -31,7 +31,17 @@
 
 ## Tooling & commands
 
-> TODO once the Tauri scaffold exists: fill `commands` in `worktree.config.json` (build/test/dev for Tauri).
+Scaffold exists (2026-10-09, `task/scaffold-tauri-app`). Proposed `commands` for `worktree.config.json` — owner applies on main after review:
+
+```json
+"commands": {
+  "test": "npm run build && cargo check --manifest-path src-tauri/Cargo.toml",
+  "release": "npm run tauri build",
+  "stop": "taskkill /F /IM epicorganizer.exe /T"
+}
+```
+
+`test` builds the frontend first because `tauri::generate_context!` requires `dist/` to exist; `stop` only matters if a dev app is left running and locks the worktree at teardown.
 
 ## Constraints
 
