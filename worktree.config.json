@@ -1,0 +1,6 @@
+{
+  "mainBranch": "main",
+  "worktreeRoot": "",
+  "secretFiles": [".env", ".env.local"],
+  "commands": {}
+}

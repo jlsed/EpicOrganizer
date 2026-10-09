@@ -1,0 +1,6 @@
+# Parallel worktree workflow artifacts (docs/parallel-workflow.md)
+memory-bank/inbox/
+.parallel/
+
+# Claude Code skill mirrors (junctions to .agents/skills — regenerate with npx skills)
+.claude/skills/
