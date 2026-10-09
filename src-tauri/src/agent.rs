@@ -116,7 +116,7 @@ pub async fn plan<F: Fn(String)>(
     }
     progress("Proposing file operations…".to_string());
     messages.push(ChatMessage::user(PROPOSE_INSTRUCTION));
-    let mutation_tools = tools::mutation_tool_schemas();
+        let mutation_tools = tools::mutation_tool_schemas();
     let proposal = tokio::select! {
         res = client.chat(&messages, &mutation_tools, PROPOSE_NUM_PREDICT) => res?,
         _ = cancel_rx.changed() => {
@@ -126,15 +126,87 @@ pub async fn plan<F: Fn(String)>(
             client.chat(&messages, &mutation_tools, PROPOSE_NUM_PREDICT).await?
         }
     };
-    let calls = proposal.tool_calls.unwrap_or_default();
-    if calls.len() > MAX_PROPOSED_OPERATIONS {
-        warnings.push(format!("Kept the first {MAX_PROPOSED_OPERATIONS} proposed operations."));
-    }
-    let operations: Vec<ProposedOperation> = calls
+    let calls = proposal.tool_calls.clone().unwrap_or_default();
+    messages.push(proposal);
+
+    let mut operations: Vec<ProposedOperation> = calls
+
+    let proposal = client.chat(&messages, &tools::mutation_tool_schemas(), PROPOSE_NUM_PREDICT).await?;
+    let calls = proposal.tool_calls.clone().unwrap_or_default();
+    messages.push(proposal);
+
+    let mut operations: Vec<ProposedOperation> = calls
         .into_iter()
-        .take(MAX_PROPOSED_OPERATIONS)
         .map(|call| to_proposed_operation(&scoped, call))
         .collect();
+
+    let top_level_files = get_top_level_files(&scoped)?;
+    let mut handled_files = BTreeSet::new();
+
+    for op in &operations {
+        if op.tool == tools::TOOL_MOVE_FILE {
+            if let Some(src) = op.arguments.get("source").and_then(|v| v.as_str()) {
+                handled_files.insert(src.to_string());
+            }
+        } else if op.tool == tools::TOOL_RENAME_FILE {
+            if let Some(path) = op.arguments.get("path").and_then(|v| v.as_str()) {
+                handled_files.insert(path.to_string());
+            }
+        }
+    }
+
+    let mut retry = 0;
+    loop {
+        let mut missed_files = Vec::new();
+        for file in &top_level_files {
+            if !handled_files.contains(file) {
+                missed_files.push(file.clone());
+            }
+        }
+
+        if missed_files.is_empty() || retry >= 2 {
+            break;
+        }
+
+        progress(format!("Double-checking {} remaining files…", missed_files.len()));
+        let prompt = format!(
+            "You did not propose operations for these files: {}. \
+            If the user's instruction applies to any of them, emit tool calls for them now. \
+            If they should NOT be moved or renamed based on the instruction, emit NO tool calls.",
+            missed_files.join(", ")
+        );
+        messages.push(ChatMessage::user(prompt));
+
+        let iter_proposal = client.chat(&messages, &tools::mutation_tool_schemas(), PROPOSE_NUM_PREDICT).await?;
+        let iter_calls = iter_proposal.tool_calls.clone().unwrap_or_default();
+        messages.push(iter_proposal);
+
+        if iter_calls.is_empty() {
+            break; // AI actively decided no more files match
+        }
+
+        for call in iter_calls {
+            let op = to_proposed_operation(&scoped, call);
+            if op.tool == tools::TOOL_MOVE_FILE {
+                if let Some(src) = op.arguments.get("source").and_then(|v| v.as_str()) {
+                    handled_files.insert(src.to_string());
+                }
+            } else if op.tool == tools::TOOL_RENAME_FILE {
+                if let Some(path) = op.arguments.get("path").and_then(|v| v.as_str()) {
+                    handled_files.insert(path.to_string());
+                }
+            }
+            operations.push(op);
+        }
+
+        retry += 1;
+    }
+
+    if operations.len() > MAX_PROPOSED_OPERATIONS {
+        warnings.push(format!("Kept the first {MAX_PROPOSED_OPERATIONS} proposed operations."));
+        operations.truncate(MAX_PROPOSED_OPERATIONS);
+    }
+
     if operations.is_empty() {
         warnings.push("The model proposed no file operations.".to_string());
     }
@@ -257,6 +329,20 @@ fn to_proposed_operation(root: &ScopedRoot, call: ToolCall) -> ProposedOperation
             reason: Some(reason),
         },
     }
+}
+
+fn get_top_level_files(root: &ScopedRoot) -> Result<Vec<String>, String> {
+    let mut files = Vec::new();
+    let read_dir = std::fs::read_dir(root.canonical())
+        .map_err(|e| format!("cannot read '{}': {e}", root.canonical().display()))?;
+    for entry in read_dir.filter_map(Result::ok) {
+        if let Ok(file_type) = entry.file_type() {
+            if file_type.is_file() {
+                files.push(root.display_rel(&entry.path()));
+            }
+        }
+    }
+    Ok(files)
 }
 
 fn understand_prompt(root: &str) -> String {

@@ -3,7 +3,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const DEFAULT_MODEL: &str = "llama3.2:3b";
+pub const DEFAULT_MODEL: &str = "llama3.1:latest";
 const OLLAMA_BASE: &str = "http://127.0.0.1:11434";
 const CHAT_TIMEOUT: Duration = Duration::from_secs(300);
 const KEEP_ALIVE: &str = "30m";
