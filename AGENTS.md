@@ -65,9 +65,9 @@ Core files stay compact at status / invariants / next-step level; per-milestone 
 
 ## Project Quick Reference
 
-- **Project**: EpicOrganizer — fresh hackathon project; stack not locked yet.
+- **Project**: EpicOrganizer — hackathon desktop app: local-AI file organizer (privacy-first).
 - **Root**: `E:\Hackathon\EpicOrganizer`
-- **Stack**: TBD — record the decision in `memory-bank/techContext.md`; fill `commands` in `worktree.config.json` once chosen.
+- **Stack**: Locked 2026-10-09 (see `memory-bank/techContext.md`): Tauri shell, Rust core (file ops + crypto), Llama 3.1 8B local (runtime TBD). Fill `commands` in `worktree.config.json` once the app scaffold exists.
 - **Memory bank**: `memory-bank/` (read ALL files at session start; per-slice history lives in `memory-bank/archive/`).
 - **Skills**: `.agents/skills/` (installed via `npx skills`; see `skills-lock`-style provenance in each SKILL.md source notes).
 - **Versioning**: disabled until a `version` block is added to `worktree.config.json` and a version file exists.

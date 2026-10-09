@@ -1,25 +1,35 @@
 # EpicOrganizer — Tech Context
 
-## Stack
+## Stack (locked 2026-10-09)
 
 | Layer | Choice | Version | Notes |
 | --- | --- | --- | --- |
-| Language | TBD | | |
-| Framework | TBD | | |
-| Database | TBD | | |
+| Shell / UI | Tauri (desktop) | TBD | webview UI; frontend framework TBD |
+| Core backend | Rust | TBD | file ops, tool execution, orchestration glue |
+| Crypto | Rust (crate TBD) | TBD | encryption/decryption of flagged files |
+| Local AI | Llama 3.1 8B | 8B | runs on-device; inference runtime TBD |
+| Database | none expected | — | hackathon scope; settings/state only if needed |
 | Testing | TBD | | |
-| Hosting | TBD | | |
 
-**No stack is locked yet.** When it is, record it here and update the checklist:
+## Open infra decisions (resolve before/while scaffolding)
 
-- [ ] Fill `commands` (`test` / `release` / `stop`) in `worktree.config.json`
-- [ ] Add a `version` block to `worktree.config.json` if versioned commits are wanted (see `docs/parallel-workflow.md` §7)
-- [ ] Update `AGENTS.md` project quick reference
+- **Inference runtime**: how Llama 3.1 8B is served locally (Ollama vs llama.cpp vs Rust bindings) and how Rust/Tauri talks to it.
+- **Frontend framework** inside the Tauri webview.
+- **Encryption scheme + key management**: cipher choice (e.g. AES-GCM via a Rust crate) and where the key/password lives.
+- **Tool-calling protocol**: how model output becomes validated file operations (structured function calls vs a parsed plan format).
 
 ## Tooling & commands
 
-> TODO
+> TODO once the Tauri scaffold exists: fill `commands` in `worktree.config.json` (build/test/dev for Tauri).
 
 ## Constraints
 
-> TODO — e.g. hackathon time budget, offline requirements, filesystem/RAM limits.
+- **1-day hackathon** (2026-10-09) — MVP scope only.
+- Windows dev machine; demo must work offline.
+- Llama 3.1 8B needs a capable GPU/RAM — inference speed is the demo risk.
+- No versioning for now (no `version` block in `worktree.config.json`).
+
+## Checklist
+
+- [ ] Fill `commands` (`test` / `release` / `stop`) in `worktree.config.json` once the scaffold exists
+- [ ] Write ADRs for the locked decisions (stack trio; encryption approach) once they are final
