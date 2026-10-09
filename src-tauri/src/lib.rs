@@ -1,5 +1,8 @@
 mod agent;
 mod commands;
+mod crypto;
+mod detect;
+mod extract;
 mod ollama;
 mod tools;
 
@@ -10,7 +13,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::plan_organize,
             commands::execute_plan,
-            commands::check_ollama
+            commands::check_ollama,
+            commands::detect_confidential,
+            commands::encrypt_files,
+            commands::decrypt_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

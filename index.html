@@ -52,8 +52,35 @@
         <h2 id="step-report">4 · Result</h2>
         <ul id="report" class="ops"></ul>
         <div class="row">
+          <button id="scan" type="button" class="button">Check for confidential files</button>
           <button id="reset" type="button" class="button">Organize another folder</button>
         </div>
+      </section>
+
+      <section id="confidential-panel" class="panel hidden" aria-labelledby="step-confidential">
+        <h2 id="step-confidential">5 · Confidential files</h2>
+        <p id="confidential-status" class="progress muted"></p>
+        <ul id="confidential-list" class="ops"></ul>
+        <div id="passphrase-row" class="row hidden">
+          <input
+            id="passphrase"
+            class="input"
+            type="password"
+            placeholder="Passphrase"
+            autocomplete="new-password"
+          />
+          <input
+            id="passphrase-confirm"
+            class="input"
+            type="password"
+            placeholder="Confirm passphrase"
+            autocomplete="new-password"
+          />
+          <button id="encrypt-selected" type="button" class="button primary" disabled>
+            Encrypt selected
+          </button>
+        </div>
+        <ul id="encrypt-results" class="ops"></ul>
       </section>
     </main>
   </body>
