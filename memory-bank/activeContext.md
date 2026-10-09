@@ -2,6 +2,7 @@
 
 ## Current Phase
 
+- 2026-10-09 — M3 detect + encrypt flow landed (task `2026-10-09-m3-detect-encrypt`, branch `task/m3-detect-encrypt`): `extract.rs` / `crypto.rs` / `detect.rs`, commands `detect_confidential` / `encrypt_files` / `decrypt_file`, `read_file` PDF/docx extraction, UI "5 · Confidential files" panel (auto-scan after execute, explainable reasons, consent-gated encryption, in-app decrypt round-trip). ADR 0001 `docs/adr/0001-confidential-detection-and-encryption.md`. Deps added: `aes-gcm` 0.11.1, `argon2` 0.6.0, `zeroize` 1.9.1, `getrandom` 0.4, `pdf-extract` 0.12.1, `zip` 9.0.0 (deflate only), `quick-xml` 0.42.0; dev `lopdf` 0.42.0. Validation: `npm run build` exit 0; `cargo check` zero warnings; `cargo test` 28 passed/2 ignored; live smoke on Ollama `llama3.2:3b` passed (organize + detection); `tauri dev` window smoke passed. Next: M4 demo polish / offline proof.
 - 2026-10-09 — M2 organize flow landed (task `2026-10-09-m2-organize-flow`, branch `task/m2-organize-flow`): four-stage UI (folder → instruction → review → report), Rust modules `ollama.rs` / `tools.rs` / `agent.rs` / `commands.rs`, dialog plugin + `dialog:default` capability, commands `plan_organize` / `execute_plan` / `check_ollama`. Deps added: `tauri-plugin-dialog` 2.8.1, `reqwest` 0.13.5 (json, no TLS), dev `tempfile` 3.27.0; npm `@tauri-apps/plugin-dialog`. Live smoke on Ollama `llama3.2:3b` passed (plan → approve → execute), dev window smoke passed, and `npm run tauri build` produced MSI + NSIS installers. Next: M3 (detect + encrypt; PDF/docx extraction lands here).
 - 2026-10-09 — Tauri scaffold landed (task `2026-10-09-scaffold-tauri-app`, branch `task/scaffold-tauri-app`): vanilla-ts + Tauri v2 (`com.epicorganizer.app`), placeholder shell wired to Rust via `greet`; `npm run build`, `cargo check`, and a `tauri dev` window check all pass. Resolved deps: @tauri-apps/api 2.12.2, @tauri-apps/cli 2.12.1, tauri 2.12.2, tauri-build 2.7.1, vite 8.3.4, typescript 6.0.3 (node 22.14.0, rustc 1.94.0). Next: owner fills `commands` in `worktree.config.json` on main after review, then M2 (organize flow) starts from this scaffold.
 - 2026-10-09 (hackathon day): all pre-build decisions locked (product, stack, runtime, webview, crypto, protocol, scope, content reading). No code yet. Next: scaffold Tauri and build.
@@ -26,7 +27,7 @@
 
 ## Next Step
 
-- Add `stop` to `commands` in `worktree.config.json` (`test`/`release` configured in `fa8f0df`), then build M3 (detect + encrypt; PDF/docx extraction) and M4 (demo polish / offline proof).
+- Build M4 (demo polish / offline proof); add `stop` to `commands` in `worktree.config.json` when convenient (`test`/`release` configured in `fa8f0df`).
 
 ## Learnings & Preferences
 
@@ -40,3 +41,10 @@
 - Windows `canonicalize` returns `\\?\` paths — canonicalize both sides before `starts_with`; skip symlinks in directory listings so they cannot expose content outside the root.
 - `cargo test` also compiles `tauri::generate_context!`, so `npm run build` must precede *any* cargo command, not just `cargo check`.
 - llama3.2:3b tool discipline is weak ("only images" not always obeyed; invents file names) — plan-time validation marks nonexistent targets invalid and the user reviews before execution; consider the 8B model for the GPU demo.
+- `quick-xml` 0.42 is str-based: `event.name().as_ref()` returns `&str` (not bytes), text/ref events deref to `str`, entities arrive as separate `Event::GeneralRef` — older byte-matching examples do not compile.
+- `aes-gcm` 0.11 + hybrid-array 0.4: `Array::from_slice` is deprecated; build nonces as owned values with `Nonce::<U12>::from([u8; 12])` and pass `&nonce`.
+- `zip` 9: `SimpleFileOptions` still exists; use `default-features = false, features = ["deflate"]` to avoid C compression backends.
+- `pdf-extract` 0.12 extracts text from a synthetic Type1/Helvetica PDF built with `lopdf` — a clean in-test fixture strategy with no committed binary.
+- `Result::unwrap_err` in tests requires the *Ok* type to implement `Debug` (crypto outcome structs needed `#[derive(Debug)]`).
+- llama3.2:3b detection false-positives on benign prose (`notes.md` → "personal identity data"); rule reasons stay authoritative and the user reviews, but the 8B model is the demo upgrade.
+- `worktree-finish` throws on a dirty worktree — Build Mode commits WIP (project workflow explicitly allows it) before `/end-task`.
