@@ -39,3 +39,7 @@
 - Validation: `npm run build` exit 0; `cargo test` 30 passed/2 ignored; live `llama3.2:3b`
   smoke (raw `/api/chat`, exact prompt + read tool schemas) — out-of-scope → exactly
   `NOT_A_FILE_TASK` with no tool calls; in-scope instruction → normal `list_files` calls.
+- Follow-up (same day): scope narrowed to files directly at the ROOT top level — subfolder
+  contents are ignored and must never be read/moved/renamed/deleted; the model must cover every
+  matching top-level file, and `PROPOSE_INSTRUCTION` forbids subfolder sources. Validation:
+  `npm run build` exit 0; `cargo test` 30 passed/2 ignored.
