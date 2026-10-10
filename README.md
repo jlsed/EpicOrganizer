@@ -26,7 +26,7 @@ Files pile up and manual organizing is tedious. Existing AI organizers ship file
 ┌─────────────────────────── Tauri app (local) ───────────────────────────┐
 │  Webview UI  ──commands/events──▶  Rust core                            │
 │    instruction box                 ├─ AI orchestrator (Ollama + local   │
-│    plan review / confirm           │   model; llama3.2:3b demo)         │
+│    plan review / confirm           │   model; llama3.1:8b default)       │
 │    organize report                 ├─ Script tools (list/read/move/     │
 │    confidential review + approve   │   create/rename) — the ONLY way    │
 │                                    │   files are touched                │
@@ -60,13 +60,13 @@ Your passphrase goes through Argon2id (per-file salt) to derive a KEK, which wra
 ### Prerequisites
 
 - Windows (development and demo target), Node 22+, Rust 1.94+ (MSVC toolchain)
-- [Ollama](https://ollama.com) running locally, with the demo model pulled:
+- [Ollama](https://ollama.com) running locally, with the default model pulled:
 
 ```powershell
-ollama pull llama3.2:3b
+ollama pull llama3.1:8b
 ```
 
-`llama3.2:3b` is the CPU-friendly demo model (2 GB on disk, ~2.6 GB RAM, tool calls + detection verified). Llama 3.1 8B is the drop-in upgrade on GPU hardware — the app talks to one Rust interface, so the model stays swappable.
+`llama3.1:8b` is the default model (~4.9 GB on disk; a capable GPU is recommended for responsive planning). On CPU-only machines, set `EPICORGANIZER_MODEL=llama3.2:3b` to fall back to the smaller CPU-friendly model — the app talks to one Rust interface, so the model stays swappable.
 
 ### Run in development
 
