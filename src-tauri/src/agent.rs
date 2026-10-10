@@ -116,7 +116,7 @@ pub async fn plan<F: Fn(String)>(
     }
     progress("Proposing file operations…".to_string());
     messages.push(ChatMessage::user(PROPOSE_INSTRUCTION));
-        let mutation_tools = tools::mutation_tool_schemas();
+    let mutation_tools = tools::mutation_tool_schemas();
     let proposal = tokio::select! {
         res = client.chat(&messages, &mutation_tools, PROPOSE_NUM_PREDICT) => res?,
         _ = cancel_rx.changed() => {
@@ -126,12 +126,6 @@ pub async fn plan<F: Fn(String)>(
             client.chat(&messages, &mutation_tools, PROPOSE_NUM_PREDICT).await?
         }
     };
-    let calls = proposal.tool_calls.clone().unwrap_or_default();
-    messages.push(proposal);
-
-    let mut operations: Vec<ProposedOperation> = calls
-
-    let proposal = client.chat(&messages, &tools::mutation_tool_schemas(), PROPOSE_NUM_PREDICT).await?;
     let calls = proposal.tool_calls.clone().unwrap_or_default();
     messages.push(proposal);
 
